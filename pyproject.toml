@@ -1,0 +1,59 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "firewall-aiops"
+version = "0.1.0"
+description = "Governed AI-ops for OPNsense + pfSense firewalls: rules, NAT, aliases, VPN, DHCP, diagnostics, flagship RCA analyses, and governed writes (rule toggle, alias entries, apply/reconfigure/reboot) with a built-in governance harness (audit, budget, undo, risk tiers)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "wei", email = "zhouwei008@gmail.com" }]
+dependencies = [
+    "httpx>=0.27,<1.0",
+    "typer>=0.12,<1.0",
+    "rich>=13.0,<16.0",
+    "pyyaml>=6.0,<7.0",
+    "cryptography>=42.0",
+    "mcp[cli]>=1.10,<2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0,<10.0",
+    "ruff>=0.5,<1.0",
+]
+
+[project.scripts]
+firewall-aiops = "firewall_aiops.cli:app"
+firewall-aiops-mcp = "mcp_server.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["firewall_aiops", "mcp_server"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Vendored governance harness — kept faithful to its source; the exception
+# names (PolicyDenied/BudgetExceeded) and a few long SQL/format lines are
+# intentional and stable, so don't reflow them here.
+"firewall_aiops/governance/*.py" = ["E501", "N818"]
+# MCP server files are reflected by FastMCP/Pydantic; PEP 604 unions (X | None)
+# crash on older mcp/pydantic, so they intentionally use Optional[X].
+"mcp_server/**/*.py" = ["UP007", "UP045"]
+# The MCP entry keeps an explicit Python-version guard even though the declared
+# minimum is already 3.11.
+"firewall_aiops/cli/_root.py" = ["UP036"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests (require a live OPNsense or pfSense firewall)",
+]

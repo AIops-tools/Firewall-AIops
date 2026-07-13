@@ -1,0 +1,26 @@
+name: Publish to PyPI
+
+# Trusted Publishing (OIDC) — publishes from GitHub's runners with no API token,
+# sidestepping the local-IP / account new-project rate limit. Configure a matching
+# "trusted publisher" for this package on PyPI (see the repo release notes).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # required for PyPI Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
