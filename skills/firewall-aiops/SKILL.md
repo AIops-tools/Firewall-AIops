@@ -123,6 +123,7 @@ the appropriate other AIops-tools skill.
 3. Re-run without `--dry-run` (double-confirm) — it captures the rule's prior enabled
    state and records an inverse undo descriptor
 4. `apply_changes` (risk=high; set `FIREWALL_AUDIT_APPROVED_BY` +
+- **Secure by default (v0.2.0+)**: with no `~/.firewall-aiops/rules.yaml`, high/critical operations are denied unless `FIREWALL_AUDIT_APPROVED_BY` names an approver (set `FIREWALL_AUDIT_RATIONALE` too). `firewall-aiops init` seeds a starter rules.yaml; an operator-authored rules file is honoured as-is.
    `FIREWALL_AUDIT_RATIONALE`) to commit staged config
 
 ## Governance & Safety
