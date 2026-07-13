@@ -1,4 +1,4 @@
-"""The ``@governed_tool`` decorator — mandatory wrapper for all Monitoring MCP tool functions.
+"""The ``@governed_tool`` decorator — mandatory wrapper for all firewall MCP tool functions.
 
 Responsibilities:
   1. Pre-check: evaluate policy rules (deny, maintenance window)
@@ -58,7 +58,7 @@ def governed_tool(
     sensitive_params: list[str] | None = None,
     undo: Any = None,
 ) -> Any:
-    """Decorator for all Monitoring MCP tool functions.
+    """Decorator for all firewall MCP tool functions.
 
     Can be used with or without arguments::
 
@@ -365,7 +365,7 @@ def _finalize(state: _CallState) -> None:
         pass
 
     # timeout_seconds is advisory: exceeding it logs a warning, no hard
-    # cancellation (cancelling mid-flight Monitoring calls is worse).
+    # cancellation (cancelling mid-flight firewall calls is worse).
     if state.timeout_seconds and duration > state.timeout_seconds * 1000:
         _log.warning(
             "%s.%s took %dms — exceeded timeout_seconds=%d (advisory, not cancelled)",

@@ -43,7 +43,7 @@ _DEFAULT_RUNAWAY_WINDOW_SEC = 120
 class BudgetExceeded(Exception):
     """Raised when a tool call would exceed a budget / runaway limit.
 
-    Subclasses nothing Monitoring-specific; the decorator wraps it into a
+    Subclasses nothing firewall-specific; the decorator wraps it into a
     PolicyResult so it shares the existing denial audit path. Kept as its own
     type (not raw PolicyDenied) so callers can catch budget stops distinctly.
     """

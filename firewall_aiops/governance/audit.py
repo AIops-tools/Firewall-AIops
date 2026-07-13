@@ -1,4 +1,4 @@
-"""Unified audit logging engine — all Monitoring skills write to a single SQLite database.
+"""Unified audit logging engine — all firewall skills write to a single SQLite database.
 
 Replaces 7 per-skill JSON Lines audit loggers with one shared ``~/.firewall-aiops/audit.db``.
 Framework-agnostic: works with Claude, Codex, local agents, or any MCP client.

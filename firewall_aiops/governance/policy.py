@@ -1,4 +1,4 @@
-"""Policy engine — rule-based access control for Monitoring MCP tools.
+"""Policy engine — rule-based access control for firewall MCP tools.
 
 Rules are loaded from ``~/.firewall-aiops/rules.yaml`` with hot-reload on file change.
 """
@@ -93,7 +93,8 @@ class PolicyEngine:
         self._load_rules()
 
     def _load_rules(self) -> None:
-        """Load rules from YAML file.  Missing file → empty rules (allow all)."""
+        """Load rules from YAML file. Missing file → empty rules (deny rules off;
+        high/critical still require an approver — see required_approval_tier)."""
         if not self._path.exists():
             self._rules = {}
             self._mtime = 0.0
@@ -113,7 +114,7 @@ class PolicyEngine:
         """Hot-reload if file changed."""
         if not self._path.exists():
             if self._rules:
-                _log.warning("Policy rules file deleted: %s — clearing rules (allow all)", self._path)
+                _log.warning("Policy rules file deleted: %s — clearing rules (high/critical fall back to the default approver gate)", self._path)
                 self._rules = {}
                 self._mtime = 0.0
             return
@@ -156,7 +157,8 @@ class PolicyEngine:
 
         self._maybe_reload()
 
-        # No rules file → allow everything
+        # No rules file → no deny rules (destructive ops are still gated by
+        # required_approval_tier's secure-by-default dual tier)
         if not self._rules:
             return PolicyResult(allowed=True, rule="no_rules")
 
@@ -225,11 +227,28 @@ class PolicyEngine:
         on operation glob / environment / resource tag / minimum risk and maps
         to a tier (none/confirm/dual/review). The FIRST matching, HIGHEST tier
         wins so a prod-tagged destructive op can't be down-graded by a looser
-        rule listed earlier. No config → tier ``none`` (backward compatible).
+        rule listed earlier.
+
+        Secure by default: with NO rules file at all, high/critical operations
+        require a named approver (``dual`` tier) — a fresh install must not
+        allow destructive writes unattended. An operator-authored rules file
+        (even one without a ``risk_tiers`` block) is an explicit choice and is
+        honoured as-is (tier ``none``).
         """
+        if os.environ.get("FIREWALL_POLICY_DISABLED") == "1":
+            return TierDecision(tier="none", rule="policy_disabled")
         self._maybe_reload()
         tiers = self._rules.get("risk_tiers") if self._rules else None
         if not tiers:
+            if not self._rules and risk_level in ("high", "critical"):
+                return TierDecision(
+                    tier="dual",
+                    rule="default_high_risk",
+                    reason=(
+                        f"No rules file at {self._path} — high/critical operations require a named approver (FIREWALL_AUDIT_APPROVED_BY) by default. Author rules.yaml "
+                        "(run the init wizard) to customize this."
+                    ),
+                )
             return TierDecision(tier="none", rule="no_tiers")
 
         tags = _extract_tags(params)

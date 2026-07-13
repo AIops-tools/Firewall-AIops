@@ -136,3 +136,20 @@ def test_config_rejects_bad_platform_and_defaults_port():
     pf = TargetConfig(name="p", platform=PFSENSE, host="h")
     assert pf.port == 443
     assert op.base_url == "https://h:443"
+
+
+# ── URL-encoding of agent-supplied path segments ─────────────────────────────
+
+
+@pytest.mark.unit
+def test_path_traversal_ids_are_url_encoded():
+    """An id carrying ``../`` must not reach the HTTP client as a raw path
+    traversal — every substituted value is URL-encoded in Platform.path()."""
+    opn = get_platform(OPNSENSE)
+    path = opn.path("rule_get", uuid="../../core/system/reboot")
+    assert "../" not in path
+    assert path.startswith("/api/firewall/filter/getRule/")
+
+    pf = get_platform(PFSENSE)
+    path = pf.path("alias_uuid", name="x&admin=1?y=../z")
+    assert "../" not in path and "&admin" not in path

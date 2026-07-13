@@ -15,8 +15,45 @@ import yaml
 
 from firewall_aiops.cli._common import cli_errors, console
 from firewall_aiops.config import CONFIG_DIR, CONFIG_FILE
+from firewall_aiops.governance.paths import ops_path
 from firewall_aiops.platform import OPNSENSE, PFSENSE, get_platform
 from firewall_aiops.secretstore import SecretStore, resolve_master_password
+
+# Starter policy: keeps the secure-by-default gate (high/critical writes need a
+# named approver) explicit and editable, and shows the other rule kinds.
+DEFAULT_RULES_YAML = """\
+# firewall-aiops policy rules — hot-reloaded on change (no restart needed).
+# Kinds: deny rules, maintenance_window, risk_tiers (graduated autonomy).
+
+risk_tiers:
+  - name: high-risk-requires-approver
+    tier: dual
+    min_risk_level: high
+    reason: >-
+      High/critical writes need a named human approver — set
+      FIREWALL_AUDIT_APPROVED_BY (and FIREWALL_AUDIT_RATIONALE) before the call.
+
+# deny:
+#   - name: no-prod-reboots
+#     operations: ["reboot", "apply_*"]
+#     environments: ["production"]
+#     reason: "Reboots/config commits in production go through change management."
+
+# maintenance_window:
+#   start: "22:00"
+#   end: "06:00"
+"""
+
+
+def _write_default_rules() -> None:
+    """Seed a starter rules.yaml (only when none exists) so the policy layer
+    is explicit from day one; never overwrites an operator-authored file."""
+    rules_path = ops_path("rules.yaml")
+    if rules_path.exists():
+        return
+    rules_path.parent.mkdir(parents=True, exist_ok=True)
+    rules_path.write_text(DEFAULT_RULES_YAML, "utf-8")
+    console.print(f"[green]✓ Wrote default policy rules:[/] {rules_path}")
 
 
 def _load_existing_targets() -> list[dict]:
@@ -73,8 +110,9 @@ def init_cmd() -> None:
 
         host = typer.prompt("Host (IP or FQDN)").strip()
         port = typer.prompt("HTTPS port", default=get_platform(platform).default_port, type=int)
+        console.print("[dim]Lab/self-signed setups can answer No here.[/]")
         verify_ssl = typer.confirm(
-            "Verify TLS certificate? (No for self-signed lab certs)", default=False
+            "Verify TLS certificate? (No for self-signed lab certs)", default=True
         )
 
         username = ""
@@ -102,6 +140,7 @@ def init_cmd() -> None:
         if not typer.confirm("\nAdd another target?", default=False):
             break
 
+    _write_default_rules()
     console.print(f"\n[green]✓ Setup complete.[/] Config: {CONFIG_FILE}")
     console.print(
         "[dim]Tip: export FIREWALL_AIOPS_MASTER_PASSWORD=... in your shell profile "

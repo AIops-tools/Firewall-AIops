@@ -28,8 +28,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 from firewall_aiops.governance import sanitize
+
+
+def _seg(value: Any) -> str:
+    """URL-encode one path/query value so agent-supplied identifiers (rule
+    uuids, alias names, service names) cannot smuggle ``/``, ``../`` or query
+    metacharacters into the request URL."""
+    return quote(str(value), safe="")
 
 # ─── registered platform names ──────────────────────────────────────────────
 OPNSENSE = "opnsense"
@@ -88,6 +96,9 @@ class Platform:
         Raises a teaching ``KeyError`` when the resource is not mapped for this
         platform (so a caller asking for an unsupported surface fails fast with
         the list of what *is* available, rather than hitting a confusing 404).
+
+        Every substituted value is URL-encoded (``quote(..., safe="")``) so an
+        agent-supplied identifier can never rewrite the path (e.g. via ``../``).
         """
         try:
             template = self.paths[resource]
@@ -97,7 +108,9 @@ class Platform:
                 f"Resource '{resource}' is not mapped for platform '{self.name}'. "
                 f"Mapped resources: {available}."
             ) from exc
-        return template.format(**fmt) if fmt else template
+        if not fmt:
+            return template
+        return template.format(**{k: _seg(v) for k, v in fmt.items()})
 
     def supports(self, resource: str) -> bool:
         return resource in self.paths
