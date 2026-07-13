@@ -61,7 +61,7 @@ def rules_toggle(
     dry_run: DryRunOption = False,
 ) -> None:
     """Enable/disable a filter rule (staged — run apply to make it live)."""
-    from firewall_aiops.ops import writes as ops
+    from mcp_server.tools import writes as gov
 
     verb = "enable" if enable else "disable"
     if dry_run:
@@ -69,5 +69,4 @@ def rules_toggle(
                       parameters={"uuid": uuid, "enable": enable})
         return
     double_confirm(f"{verb} rule", uuid)
-    conn, _ = get_connection(target)
-    console.print_json(json.dumps(ops.toggle_rule(conn, uuid, enable)))
+    console.print_json(json.dumps(gov.toggle_rule(uuid=uuid, enable=enable, target=target)))
