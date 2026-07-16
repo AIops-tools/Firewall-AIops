@@ -152,3 +152,25 @@ def test_real_write_tool_persists_priorstate_undo(gov_home, monkeypatch):
     audit = _rows(gov_home / "audit.db", "audit_log")
     assert [r["tool"] for r in audit] == ["toggle_rule"]
     assert audit[0]["risk_level"] == "medium"
+
+@pytest.mark.unit
+def test_sanitized_error_result_is_audited_as_error_and_records_no_undo(gov_home):
+    """@tool_errors converts exceptions to {"error": ...} dicts before the harness
+    sees them — those must land in the audit log as status=error (not ok), and no
+    undo may be recorded for a call that changed nothing."""
+
+    @governed_tool(
+        risk_level="low",
+        undo=lambda p, r: {"tool": "never_recorded", "params": {}},
+    )
+    def _broken_widget(target: str = "") -> dict:
+        return {"error": "boom (sanitized upstream)"}
+
+    result = _broken_widget(target="t1")
+    assert result["error"]
+    assert "_undo_id" not in result
+
+    audit = _rows(gov_home / "audit.db", "audit_log")
+    assert audit[-1]["tool"] == "_broken_widget"
+    assert audit[-1]["status"] == "error"
+    assert not (gov_home / "undo.db").exists() or not _rows(gov_home / "undo.db", "undo_log")

@@ -317,6 +317,8 @@ def _record_undo(state: _CallState, result: Any) -> None:
     """
     if state.undo is None:
         return
+    if isinstance(result, dict) and result.get("error"):
+        return  # sanitized failure — no change happened, so no inverse to record
     try:
         descriptor = state.undo(state.safe_params, result)
     except Exception:  # noqa: BLE001 — undo computation must not fail the call
@@ -356,6 +358,12 @@ def _capture_error(state: _CallState, exc: Exception) -> None:
 
 def _finalize(state: _CallState) -> None:
     """Audit + circuit-breaker bookkeeping. Runs in the wrapper's finally."""
+    # A sanitized failure (@tool_errors converts exceptions into {"error": ...}
+    # dicts BEFORE this harness sees them) must not be audited as success —
+    # compliance exception reports are built from this status.
+    if state.status == "ok" and isinstance(state.result, dict) and state.result.get("error"):
+        state.status = "error"
+
     duration = int((time.time() - state.start) * 1000)
 
     # Accumulate wall-time toward the cumulative time budget (best-effort).
