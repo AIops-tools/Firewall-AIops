@@ -14,6 +14,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Wait for PyPI
+        # The release event also triggers the PyPI publish workflow; the MCP
+        # registry validates that the package version exists on PyPI, so poll
+        # until it has propagated (every 15s, up to 10 minutes).
+        run: |
+          python3 - <<'EOF'
+          import json
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          with open("server.json", encoding="utf-8") as f:
+              package = json.load(f)["packages"][0]
+          name, version = package["identifier"], package["version"]
+          url = f"https://pypi.org/pypi/{name}/{version}/json"
+          deadline = time.monotonic() + 600
+          while True:
+              try:
+                  with urllib.request.urlopen(url, timeout=10):
+                      print(f"{name}=={version} is available on PyPI.")
+                      sys.exit(0)
+              except (urllib.error.URLError, OSError) as exc:
+                  print(f"{name}=={version} not on PyPI yet ({exc}); "
+                        "retrying in 15s...")
+              if time.monotonic() >= deadline:
+                  sys.exit(f"Timed out after 10 minutes waiting for "
+                           f"{name}=={version} to appear on PyPI. "
+                           "Check the PyPI publish workflow, then re-run "
+                           "this workflow via workflow_dispatch.")
+              time.sleep(15)
+          EOF
       - name: Install mcp-publisher
         run: |
           curl -sL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher

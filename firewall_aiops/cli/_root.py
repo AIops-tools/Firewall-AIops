@@ -11,6 +11,7 @@ from firewall_aiops.cli.log import log_cmd
 from firewall_aiops.cli.overview import overview_cmd
 from firewall_aiops.cli.rules import rules_app
 from firewall_aiops.cli.secret import secret_app
+from firewall_aiops.cli.undo import undo_app
 
 app = typer.Typer(
     name="firewall-aiops",
@@ -21,6 +22,7 @@ app = typer.Typer(
 
 app.add_typer(rules_app, name="rules")
 app.add_typer(secret_app, name="secret")
+app.add_typer(undo_app, name="undo")
 app.command("init")(init_cmd)
 app.command("overview")(overview_cmd)
 app.command("log")(log_cmd)

@@ -123,4 +123,4 @@ def test_every_mcp_tool_is_governed_by_harness():
 def test_tool_count_is_expected():
     from mcp_server import _shared
 
-    assert len(_shared.mcp._tool_manager._tools) == 32
+    assert len(_shared.mcp._tool_manager._tools) == 34

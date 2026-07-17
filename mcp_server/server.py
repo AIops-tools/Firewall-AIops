@@ -27,6 +27,7 @@ from mcp_server.tools import (  # noqa: F401 — side effects
     nat,
     rules,
     system,
+    undo,
     vpn,
     writes,
 )
