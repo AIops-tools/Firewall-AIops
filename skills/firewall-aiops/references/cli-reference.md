@@ -1,7 +1,7 @@
 # firewall-aiops CLI reference
 
-> Preview / mock-only. Covers OPNsense (REST `/api/...`) and pfSense (REST v2
-> `/api/v2/...`); responses are mocked and need live verification.
+> Covers OPNsense (REST `/api/...`) and pfSense (REST v2 `/api/v2/...`). Responses are
+> validated against mocks; see `docs/VERIFICATION.md` for the live-run checklist.
 
 ## Setup & diagnostics
 

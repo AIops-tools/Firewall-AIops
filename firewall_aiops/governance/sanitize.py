@@ -43,3 +43,28 @@ def sanitize(text: str | None, max_len: int = 500) -> str:
     stripped = _CONTROL_CHAR_RE.sub("", str(text))
     cleaned = "".join(c for c in stripped if unicodedata.category(c) != "Cf")
     return cleaned[:max_len]
+
+
+def opt_str(value: object | None, max_len: int = 500) -> str | None:
+    """Sanitize a value that may legitimately be absent, preserving that absence.
+
+    Companion to :func:`sanitize`, which folds ``None`` into ``""``. That
+    conflation is invisible downstream: an empty string reads as "the field
+    exists and is empty" when the truth may be "the source never returned this
+    field at all". A consumer — and a smaller local model especially — cannot
+    recover the difference, and tends to invent one.
+
+    So: absence comes back as ``None`` (JSON ``null``), and only genuinely empty
+    values come back as ``""``. Use this for any optional API field; keep
+    :func:`sanitize` for values that are always present.
+
+    Args:
+        value: Raw value straight from an API response, or None when absent.
+        max_len: Maximum length after truncation. Default 500.
+
+    Returns:
+        The sanitized string, or None when the source had no value at all.
+    """
+    if value is None:
+        return None
+    return sanitize(str(value), max_len)

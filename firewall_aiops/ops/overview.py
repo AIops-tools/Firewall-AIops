@@ -44,8 +44,13 @@ def firewall_overview(conn: Any) -> dict:
         "version": fw.get("version"),
         "updatesAvailable": fw.get("updatesAvailable"),
         "gatewaysTotal": len(gw_list),
-        "gatewaysHealthy": sum(1 for g in gw_list if "up" in str(g.get("status", "")).lower()
-                               or str(g.get("status", "")).lower() == "none"),
+        # A gateway with no reported status is not evidence of health — only a
+        # literal "none" (pfSense for "not monitored") counts alongside "up".
+        "gatewaysHealthy": sum(
+            1 for g in gw_list
+            if g.get("status") is not None
+            and ("up" in str(g["status"]).lower() or str(g["status"]).lower() == "none")
+        ),
         "interfacesTotal": len(if_list),
         "interfacesUp": sum(1 for i in if_list if i.get("up")),
         "ruleCount": rule_total,

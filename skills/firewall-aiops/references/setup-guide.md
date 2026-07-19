@@ -1,8 +1,8 @@
 # firewall-aiops setup & security guide
 
-> Preview / mock-only — not yet validated against a live firewall. Both **OPNsense**
-> (fully open-source) and **pfSense CE** (free) are self-hostable, so a home lab is
-> the easiest live check. The modelled REST paths are the largest verification debt.
+> Both **OPNsense** (fully open-source) and **pfSense CE** (free) are self-hostable, so
+> a home lab is the easiest place to run the live checklist in `docs/VERIFICATION.md`.
+> The modelled REST paths are the largest verification debt.
 
 ## 1. Install
 

@@ -1,6 +1,6 @@
 <!-- mcp-name: io.github.AIops-tools/firewall-aiops -->
 
-# Firewall AIops (preview)
+# Firewall AIops
 
 Governed, audited AI-ops for **OPNsense** and **pfSense** firewalls — for AI agents (via MCP) and humans (via CLI).
 
@@ -34,7 +34,47 @@ risk-tier approval, undo-token recording, and prompt-injection sanitisation.
   the "make it live" commit (`apply_changes` / `reconfigure`) and `reboot` at
   **risk=high** with a dry-run preview and an approver gate.
 
-## Tool inventory (32 tools)
+## Security: read-only mode
+
+This tool is meant to be handed to an AI agent, so its safety story is enforced
+by the server rather than requested in a prompt:
+
+```bash
+export FIREWALL_READ_ONLY=1
+```
+
+With that set, the **9 write tools are never registered**. An MCP client
+lists **25 tools instead of 34** — the writes are not hidden, not
+gated behind a flag, and not merely refused when called. They are absent from
+the session. A model cannot invoke a tool it was never offered, and cannot be
+argued into one.
+
+That distinction is the whole point. A tool that exists but refuses still invites
+retry loops and "I'll describe the call instead" behaviour from smaller models,
+and it leaves a reviewer trusting a promise. An absent tool is a fact you can
+check: connect, list the tools, and see that the writes are not there.
+
+Enforcement is two layers deep, so the switch cannot be sidestepped by changing
+entry point:
+
+| Layer | What it does | Covers |
+|---|---|---|
+| `@governed_tool` harness | refuses every non-read operation outright | MCP, CLI, and in-process callers |
+| MCP registration | write tools are removed from `list_tools()` | anything speaking MCP |
+
+Read operations are unaffected, and every call is still audited to
+`~/.firewall-aiops/audit.db`.
+
+> The read/write split is derived from each tool's declared `risk_level`, and a
+> test asserts that this never disagrees with the `[READ]`/`[WRITE]` tag in the
+> tool's own documentation — so a write can't quietly present itself as a read.
+
+Running a smaller / local model? See
+[agent-guardrails.md](skills/firewall-aiops/references/agent-guardrails.md) — it lists
+the guardrails this tool now enforces for you (so you don't spend prompt budget
+restating them) and gives a ready-made system prompt for what's left.
+
+## Tool inventory (34 tools)
 
 | Domain | Tools | # | Kind |
 |--------|-------|:-:|------|
@@ -48,6 +88,7 @@ risk-tier approval, undo-token recording, and prompt-injection sanitisation.
 | **Flagship analyses** | `gateway_health_rca`, `rule_hit_and_shadow_analysis`, `blocked_traffic_rca` | 3 | read |
 | **Writes** | `toggle_rule`, `add_alias_entry`, `remove_alias_entry`, `kill_states`, `restart_service` | 5 | write (**med**) |
 | **Writes** | `apply_changes`, `reconfigure`, `reboot` | 3 | write (**high**) |
+| **Undo** | `undo_list`, `undo_apply` | 2 | read / write |
 
 Reversible writes record an inverse **undo descriptor** built from the real fetched
 before-state (`toggle_rule` restores the rule's prior enabled flag; alias add/remove
@@ -135,15 +176,19 @@ Every MCP tool is wrapped by `@governed_tool`:
 - **Sanitisation** — all firewall-returned text is bounded + injection-sanitised
   before it reaches the agent.
 
-## Preview status
+## Platform support & verification status
 
 - **Platforms**: OPNsense (REST API) and pfSense (REST API v2, pfSense-pkg-RESTAPI).
-- **Preview — mock-validated only. Not run against a live firewall.** All behaviour is
-  validated against mocked OPNsense/pfSense JSON responses; the concrete REST paths are
-  modelled from each project's public API and need live verification. Both platforms are
-  free and self-hostable (OPNsense is fully open-source; pfSense CE is free), so a home
-  lab is the easiest live check — `firewall-aiops doctor` (a firmware/version query on
-  both) is the fastest connectivity check.
+- **Test coverage**: behaviour is validated against mocked OPNsense/pfSense JSON
+  responses — every module imports, every MCP tool carries the governance marker, the
+  RCA heuristics are unit-tested against synthetic telemetry, and reversible writes are
+  asserted to record the correct inverse undo descriptor. The concrete REST paths are
+  modelled from each project's public API and have not yet been exercised against a
+  live firewall. See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the checklist a
+  live run must satisfy; `firewall-aiops doctor` (a firmware/version query on both
+  platforms) is the fastest connectivity check. Both platforms are free and
+  self-hostable (OPNsense is fully open-source; pfSense CE is free), so a home lab is
+  the easiest place to run it.
 - **Missing a capability?** Open an issue or PR at
   [github.com/AIops-tools/Firewall-AIops](https://github.com/AIops-tools/Firewall-AIops)
   — contributions and feedback welcome.

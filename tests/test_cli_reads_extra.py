@@ -77,7 +77,8 @@ def test_cli_log_action_filter(patched_conn):
     r = CliRunner().invoke(app, ["log", "--action", "block"])
     assert r.exit_code == 0, r.output
     data = json.loads(r.output)
-    assert data["total"] == 1 and data["action"] == "block"
+    assert data["returned"] == 1 and data["action"] == "block"
+    assert data["truncated"] is False
 
 
 @pytest.mark.unit

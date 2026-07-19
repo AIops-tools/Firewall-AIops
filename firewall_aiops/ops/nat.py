@@ -9,21 +9,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import pick, rule_enabled, s
+from firewall_aiops.ops._util import opt, pick, rule_enabled, s
 
 
 def _norm_pf(r: dict) -> dict:
     return {
-        "uuid": s(pick(r, "uuid", "id", "tracker")),
+        "uuid": opt(pick(r, "uuid", "id", "tracker")),
         "enabled": rule_enabled(r),
-        "interface": s(pick(r, "interface", "if")),
-        "protocol": s(pick(r, "protocol", "proto")),
-        "sourcePort": s(pick(r, "source_port", "srcport")),
-        "destination": s(pick(r, "destination_net", "destination", "dst")),
-        "destinationPort": s(pick(r, "destination_port", "dstport")),
-        "target": s(pick(r, "target", "redirect_target_ip", "natip")),
-        "targetPort": s(pick(r, "target_port", "redirect_target_port", "natport")),
-        "description": s(pick(r, "description", "descr")),
+        "interface": opt(pick(r, "interface", "if")),
+        "protocol": opt(pick(r, "protocol", "proto")),
+        "sourcePort": opt(pick(r, "source_port", "srcport")),
+        "destination": opt(pick(r, "destination_net", "destination", "dst")),
+        "destinationPort": opt(pick(r, "destination_port", "dstport")),
+        "target": opt(pick(r, "target", "redirect_target_ip", "natip")),
+        "targetPort": opt(pick(r, "target_port", "redirect_target_port", "natport")),
+        "description": opt(pick(r, "description", "descr")),
     }
 
 
@@ -42,12 +42,12 @@ def outbound_nat(conn: Any) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("nat_outbound")))
         maps = [
             {
-                "uuid": s(pick(r, "uuid", "id", "tracker")),
+                "uuid": opt(pick(r, "uuid", "id", "tracker")),
                 "enabled": rule_enabled(r),
-                "interface": s(pick(r, "interface", "if")),
-                "source": s(pick(r, "source_net", "source", "src")),
-                "translation": s(pick(r, "target", "translation", "natip", "target_ip")),
-                "description": s(pick(r, "description", "descr")),
+                "interface": opt(pick(r, "interface", "if")),
+                "source": opt(pick(r, "source_net", "source", "src")),
+                "translation": opt(pick(r, "target", "translation", "natip", "target_ip")),
+                "description": opt(pick(r, "description", "descr")),
             }
             for r in rows
         ]
@@ -62,12 +62,12 @@ def one_to_one_nat(conn: Any) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("nat_one_to_one")))
         maps = [
             {
-                "uuid": s(pick(r, "uuid", "id", "tracker")),
+                "uuid": opt(pick(r, "uuid", "id", "tracker")),
                 "enabled": rule_enabled(r),
-                "interface": s(pick(r, "interface", "if")),
-                "external": s(pick(r, "external", "external_net", "destination")),
-                "internal": s(pick(r, "internal", "source_net", "source")),
-                "description": s(pick(r, "description", "descr")),
+                "interface": opt(pick(r, "interface", "if")),
+                "external": opt(pick(r, "external", "external_net", "destination")),
+                "internal": opt(pick(r, "internal", "source_net", "source")),
+                "description": opt(pick(r, "description", "descr")),
             }
             for r in rows
         ]

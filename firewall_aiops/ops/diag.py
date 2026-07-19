@@ -9,9 +9,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import num, pick, s
+from firewall_aiops.ops._util import num, opt, pick, s
 
 _ACTIONS = {"pass", "block", "rdr", "nat", "reject"}
+
+
+def _lower(value: str | None) -> str | None:
+    """Lowercase a value that may be absent, keeping absence as absence."""
+    return value.lower() if value is not None else None
 
 
 def normalize_log(rows: list[dict]) -> list[dict]:
@@ -20,15 +25,18 @@ def normalize_log(rows: list[dict]) -> list[dict]:
     for r in rows:
         out.append(
             {
-                "time": s(pick(r, "__timestamp__", "time", "timestamp", "date")),
-                "action": s(pick(r, "action", "act", "reason"), 32).lower(),
-                "interface": s(pick(r, "interface", "if", "realint")),
-                "protocol": s(pick(r, "protoname", "protocol", "proto")),
-                "source": s(pick(r, "src", "source", "srcip", "src_addr")),
-                "sourcePort": s(pick(r, "srcport", "source_port", "src_port")),
-                "destination": s(pick(r, "dst", "destination", "dstip", "dst_addr")),
-                "destinationPort": s(pick(r, "dstport", "destination_port", "dst_port")),
-                "label": s(pick(r, "label", "rulenr", "rid", "description")),
+                "time": opt(pick(r, "__timestamp__", "time", "timestamp", "date")),
+                # Lowercased for comparison, but only when the log row actually
+                # carried an action — an absent action stays null rather than
+                # becoming the string "none".
+                "action": _lower(opt(pick(r, "action", "act", "reason"), 32)),
+                "interface": opt(pick(r, "interface", "if", "realint")),
+                "protocol": opt(pick(r, "protoname", "protocol", "proto")),
+                "source": opt(pick(r, "src", "source", "srcip", "src_addr")),
+                "sourcePort": opt(pick(r, "srcport", "source_port", "src_port")),
+                "destination": opt(pick(r, "dst", "destination", "dstip", "dst_addr")),
+                "destinationPort": opt(pick(r, "dstport", "destination_port", "dst_port")),
+                "label": opt(pick(r, "label", "rulenr", "rid", "description")),
             }
         )
     return out
@@ -41,9 +49,21 @@ def pull_log(conn: Any, limit: int = 500) -> list[dict]:
 
 
 def firewall_log(conn: Any, action: str | None = None, limit: int = 200) -> dict:
-    """[READ] Recent firewall-log entries, optionally filtered to pass/block."""
+    """[READ] Recent firewall-log entries, optionally filtered to pass/block.
+
+    Returns a truncation envelope::
+
+        {"entries": [...], "returned": 200, "limit": 200, "truncated": true, ...}
+
+    so a cut-off read announces itself. ``truncated`` is measured against the
+    full matched set, not inferred from the returned length happening to equal
+    the limit — a consumer (and a smaller local model especially) faced with a
+    long result otherwise tends to report that nothing came back at all.
+    """
     try:
-        entries = pull_log(conn, limit=max(limit, 200) if action else limit)
+        want_limit = max(1, int(limit))
+        # One more than asked for, so truncation is measured rather than guessed.
+        entries = pull_log(conn, limit=max(want_limit, 200) + 1 if action else want_limit + 1)
         if action:
             want = action.strip().lower()
             if want not in _ACTIONS:
@@ -51,8 +71,15 @@ def firewall_log(conn: Any, action: str | None = None, limit: int = 200) -> dict
                     f"Unknown action '{action}'. Choose one of: {', '.join(sorted(_ACTIONS))}."
                 )
             entries = [e for e in entries if e["action"] == want]
-        entries = entries[: max(1, int(limit))]
-        return {"total": len(entries), "action": s(action) if action else "all", "entries": entries}
+        truncated = len(entries) > want_limit
+        entries = entries[:want_limit]
+        return {
+            "action": s(action) if action else "all",
+            "entries": entries,
+            "returned": len(entries),
+            "limit": want_limit,
+            "truncated": truncated,
+        }
     except ValueError:
         raise
     except Exception as exc:  # noqa: BLE001 — report as partial
@@ -65,17 +92,24 @@ def states_table(conn: Any, top: int = 100) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("states")))
         states = [
             {
-                "interface": s(pick(r, "interface", "if", "ifname")),
-                "protocol": s(pick(r, "proto", "protocol")),
-                "source": s(pick(r, "src", "source", "src_addr")),
-                "destination": s(pick(r, "dst", "destination", "dst_addr")),
-                "state": s(pick(r, "state", "status")),
+                "interface": opt(pick(r, "interface", "if", "ifname")),
+                "protocol": opt(pick(r, "proto", "protocol")),
+                "source": opt(pick(r, "src", "source", "src_addr")),
+                "destination": opt(pick(r, "dst", "destination", "dst_addr")),
+                "state": opt(pick(r, "state", "status")),
                 "bytes": num(pick(r, "bytes", "bytes_total", default=0)),
                 "packets": num(pick(r, "packets", "pkts", default=0)),
             }
             for r in rows
         ]
-        return {"total": len(states), "states": states[: max(1, int(top))]}
+        want = max(1, int(top))
+        return {
+            "states": states[:want],
+            "returned": min(len(states), want),
+            "limit": want,
+            "truncated": len(states) > want,
+            "total": len(states),
+        }
     except Exception as exc:  # noqa: BLE001 — report as partial
         return {"error": s(exc, 200)}
 
@@ -86,11 +120,18 @@ def top_talkers(conn: Any, top: int = 20) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("top_talkers")))
         agg: dict[str, dict] = {}
         for r in rows:
-            src = s(pick(r, "src", "source", "src_addr")) or "(unknown)"
+            src = opt(pick(r, "src", "source", "src_addr")) or "(unknown)"
             bucket = agg.setdefault(src, {"source": src, "connections": 0, "bytes": 0.0})
             bucket["connections"] += 1
             bucket["bytes"] += num(pick(r, "bytes", "bytes_total", default=0))
         talkers = sorted(agg.values(), key=lambda t: (t["bytes"], t["connections"]), reverse=True)
-        return {"total": len(talkers), "topTalkers": talkers[: max(1, int(top))]}
+        want = max(1, int(top))
+        return {
+            "topTalkers": talkers[:want],
+            "returned": min(len(talkers), want),
+            "limit": want,
+            "truncated": len(talkers) > want,
+            "total": len(talkers),
+        }
     except Exception as exc:  # noqa: BLE001 — report as partial
         return {"error": s(exc, 200)}

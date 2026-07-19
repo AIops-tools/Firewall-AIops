@@ -22,4 +22,10 @@ def log_cmd(
     from firewall_aiops.ops import diag as ops
 
     conn, _ = get_connection(target)
-    console.print_json(json.dumps(ops.firewall_log(conn, action, limit)))
+    result = ops.firewall_log(conn, action, limit)
+    console.print_json(json.dumps(result))
+    if result.get("truncated"):
+        console.print(
+            f"[yellow]… truncated at {result.get('limit')} entries — "
+            f"re-run with a higher --limit to see the rest.[/yellow]"
+        )

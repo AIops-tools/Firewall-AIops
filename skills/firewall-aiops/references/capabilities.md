@@ -1,9 +1,9 @@
 # firewall-aiops capabilities
 
-> Preview / mock-only — not run against a live firewall. **32 MCP tools** (24 read,
-> 8 write) across OPNsense (REST `/api/...`, API key+secret via HTTP Basic) and
-> pfSense (REST v2 `/api/v2/...`, API key via `X-API-Key`). The concrete REST paths
-> below are modelled from each project's public API and need live verification.
+> **34 MCP tools** (25 read, 9 write) across OPNsense (REST `/api/...`, API key+secret
+> via HTTP Basic) and pfSense (REST v2 `/api/v2/...`, API key via `X-API-Key`). The
+> concrete REST paths below are modelled from each project's public API and have not
+> yet been exercised against a live firewall — see `docs/VERIFICATION.md`.
 
 A per-target `platform` field (`opnsense` / `pfsense`) selects the API shape; the same
 tool name resolves to the right path on each firewall via the platform registry.

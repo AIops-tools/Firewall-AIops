@@ -1,67 +1,48 @@
-# Firewall AIops v0.1.0 — preview
+# Release notes — firewall-aiops 0.4.0
 
-Governed AI-ops for **OPNsense** and **pfSense** firewalls for AI agents, with a
-built-in governance harness (audit, policy, token/runaway budget, undo-token
-recording, graduated risk tiers) and an encrypted credential store. Standalone —
-no external skill-family dependency. One MCP server spans both platforms: a
-per-target `platform` field selects the API shape, and the same 32 tools work on
-OPNsense (REST `/api/...`, key+secret via HTTP Basic) and pfSense (REST v2
-`/api/v2/...`, API key via `X-API-Key` header).
+Previous release: 0.3.0.
 
-> **Not affiliated with, endorsed by, or sponsored by the OPNsense project,
-> Deciso, Netgate, or the pfSense project.** OPNsense, pfSense and Netgate are
-> trademarks of their respective owners.
-
-> **Preview / mock-only.** All behaviour is validated against mocked
-> OPNsense/pfSense JSON responses; it has **not** been run against a live
-> firewall. The concrete REST paths are modelled from each project's public API
-> and need live verification. Both platforms are free/self-hostable, so a home
-> lab is the easiest live check — `firewall-aiops doctor` is the fastest.
-
-## Highlights
-
-- **32 MCP tools** (24 read, 8 write), every one wrapped with `@governed_tool`:
-  - **System** — `firmware_status`, `health_status`, `interface_status`,
-    `gateway_status`.
-  - **Rules** — `list_rules`, `rule_detail`, `rule_stats` (hit counts),
-    `rule_states`.
-  - **NAT** — `nat_port_forwards`, `nat_outbound`, `nat_one_to_one`.
-  - **Aliases** — `list_aliases`, `alias_entries`.
-  - **VPN** — `wireguard_status`, `openvpn_sessions`, `ipsec_sas`.
-  - **DHCP** — `dhcp_leases`, `dhcp_static_mappings`.
-  - **Diagnostics** — `firewall_log`, `states_table`, `top_talkers`.
-  - **Writes** — `toggle_rule`, `add_alias_entry`, `remove_alias_entry`,
-    `kill_states`, `restart_service` (med); `apply_changes`, `reconfigure`,
-    `reboot` (**high**).
-- **Flagship analyses** (transparent heuristics that show their numbers):
-  - `gateway_health_rca` — rank gateways by loss + latency, flag down/degraded,
-    map each to a likely cause + recommended action.
-  - `rule_hit_and_shadow_analysis` — never-hit (0 evaluations) enabled rules,
-    plus rules shadowed by an earlier terminating rule or duplicating one.
-  - `blocked_traffic_rca` — noisiest blocked sources/ports classified as scan,
-    service brute-force/probe, or generic — with an action.
-- **Governed writes** — reversible writes capture the **real fetched
-  before-state** and record an undo descriptor (`toggle_rule` restores the prior
-  enabled flag; alias add/remove invert). High-risk commits (`apply_changes` /
-  `reconfigure` / `reboot`) take a `dry_run` preview and require an approver;
-  `reboot` is irreversible.
-- **Encrypted secret store** — the OPNsense API secret or pfSense API key lives
-  encrypted in `~/.firewall-aiops/secrets.enc` (Fernet + scrypt), never plaintext;
-  legacy `FIREWALL_<TARGET>_SECRET` env fallback.
-- **CLI** with an `init` platform-picking wizard, `doctor`, `overview`,
-  `rules list/show/toggle`, `log`, and `secret` management.
-
-## Install
+## Headline: read-only mode
 
 ```bash
-uv tool install firewall-aiops
-firewall-aiops init       # pick platform (opnsense/pfsense) + store the secret
-firewall-aiops doctor
+export FIREWALL_READ_ONLY=1
 ```
 
-## Caveats
+With this set the **9 write tools are never registered** — an MCP
+client lists **25 tools instead of 34**. The writes are not hidden
+behind a flag and not merely refused on call: they are absent from the session,
+so a model cannot invoke one and cannot be argued into one. For a reviewer this
+is checkable rather than promised — connect, list the tools, and the writes are
+not there.
 
-- Preview / mock-only: OPNsense and pfSense responses are mocked and need live
-  verification against a real firewall (the modelled REST paths especially).
-- **Missing a capability? Open an issue or PR** — contributions and feedback
-  welcome.
+Enforcement is two layers deep: the `@governed_tool` harness refuses every
+non-read operation (covering the CLI and in-process callers too), and the MCP
+server removes write tools from `list_tools()`. Changing entry point does not
+get around it.
+
+## BREAKING — return shapes changed
+
+This release changes payloads that callers may be parsing. Both changes exist
+to stop a result from misrepresenting itself:
+
+1. **Absent fields are now `null`, not `""`.** A missing value and an empty value
+   were previously indistinguishable, which invited consumers to invent the
+   difference. Keys are still always present — only the value may be null.
+2. **Anything with a `limit` now returns an envelope** —
+   `{"<items>": [...], "returned": N, "limit": L, "truncated": bool}`. Truncation is
+   *measured* (one extra row is fetched), never inferred from the page happening to
+   be full. Where a genuine pre-cap total is knowable it is reported as `total`;
+   where it isn't, `total` is deliberately omitted rather than echoing `returned`.
+
+## Also in this release
+
+- **`docs/VERIFICATION.md`** — what the mock suite actually guarantees, a live
+  verification checklist, and the criteria for claiming this tool verified.
+- **`skills/firewall-aiops/references/agent-guardrails.md`** — for driving this tool with a
+  smaller / local model: which guardrails are now enforced for you, and a
+  ready-made system prompt for the rest.
+- Expanded operator playbooks in the skill documentation.
+- The advertised tool count now matches what an MCP client actually lists
+  (it includes `undo_list` / `undo_apply`), and a release gate keeps it honest.
+- The `(preview)` label has been dropped. It never meant unreleased; verification
+  status now lives in `docs/VERIFICATION.md` where it can be specific.

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import as_obj, pick, s
+from firewall_aiops.ops._util import as_obj, opt, pick, s
 
 
 def list_aliases(conn: Any) -> dict:
@@ -19,10 +19,10 @@ def list_aliases(conn: Any) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("aliases_search")))
         aliases = [
             {
-                "uuid": s(pick(r, "uuid", "id")),
-                "name": s(pick(r, "name", "aliasname")),
-                "type": s(pick(r, "type", "aliastype")),
-                "description": s(pick(r, "description", "descr")),
+                "uuid": opt(pick(r, "uuid", "id")),
+                "name": opt(pick(r, "name", "aliasname")),
+                "type": opt(pick(r, "type", "aliastype")),
+                "description": opt(pick(r, "description", "descr")),
                 "entries": _entry_count(pick(r, "content", "address", "entries", default="")),
             }
             for r in rows
@@ -65,5 +65,5 @@ def _extract_entries(conn: Any, raw: Any) -> list[str]:
         parts = address.replace(",", "\n").replace(" ", "\n").splitlines()
         return [s(p, 128) for p in parts if p.strip()]
     rows = conn.platform.rows(raw)
-    out = [s(pick(r, "ip", "address", "entry", "host"), 128) for r in rows]
+    out = [opt(pick(r, "ip", "address", "entry", "host"), 128) for r in rows]
     return [e for e in out if e]

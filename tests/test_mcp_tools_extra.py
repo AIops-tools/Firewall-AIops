@@ -236,7 +236,7 @@ def test_read_tools_return_normalized_payloads(monkeypatch):
     assert t_vpn.ipsec_sas()["total"] == 1
     assert t_dhcp.dhcp_leases()["total"] == 1
     assert t_dhcp.dhcp_static_mappings()["total"] == 1
-    assert t_diag.firewall_log()["total"] == 1
+    assert t_diag.firewall_log()["returned"] == 1
     assert t_diag.states_table()["total"] == 1
     assert t_diag.top_talkers()["total"] == 1
     assert t_alias.list_aliases()["total"] == 1

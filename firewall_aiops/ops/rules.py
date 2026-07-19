@@ -10,22 +10,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import as_obj, num, pick, rule_enabled, s
+from firewall_aiops.ops._util import as_obj, num, opt, pick, rule_enabled, s
 
 
 def _norm_rule(r: dict) -> dict:
     """Normalise one rule row across OPNsense / pfSense field names."""
     return {
-        "uuid": s(pick(r, "uuid", "id", "tracker", "@attributes")),
-        "sequence": s(pick(r, "sequence", "seq", "order")),
+        "uuid": opt(pick(r, "uuid", "id", "tracker", "@attributes")),
+        "sequence": opt(pick(r, "sequence", "seq", "order")),
         "enabled": rule_enabled(r),
-        "action": s(pick(r, "action", "type")),
-        "interface": s(pick(r, "interface", "if", "descr")),
-        "protocol": s(pick(r, "protocol", "proto", "ipprotocol")),
-        "source": s(pick(r, "source_net", "source", "src")),
-        "destination": s(pick(r, "destination_net", "destination", "dst")),
-        "destinationPort": s(pick(r, "destination_port", "dstport", "dport")),
-        "description": s(pick(r, "description", "descr", "label")),
+        "action": opt(pick(r, "action", "type")),
+        "interface": opt(pick(r, "interface", "if", "descr")),
+        "protocol": opt(pick(r, "protocol", "proto", "ipprotocol")),
+        "source": opt(pick(r, "source_net", "source", "src")),
+        "destination": opt(pick(r, "destination_net", "destination", "dst")),
+        "destinationPort": opt(pick(r, "destination_port", "dstport", "dport")),
+        "description": opt(pick(r, "description", "descr", "label")),
         "evaluations": num(pick(r, "evaluations", "evals", default=0)),
     }
 
@@ -37,7 +37,13 @@ def list_rules(conn: Any, interface: str | None = None) -> dict:
         rules = [_norm_rule(r) for r in rows]
         if interface:
             want = interface.strip().lower()
-            rules = [r for r in rules if r["interface"].lower() == want]
+            # A rule whose interface the API did not report is null, not "" —
+            # it cannot match a requested interface, so skip it rather than
+            # crashing on .lower().
+            rules = [
+                r for r in rules
+                if r["interface"] is not None and r["interface"].lower() == want
+            ]
         return {"total": len(rules), "rules": rules}
     except Exception as exc:  # noqa: BLE001 — report as partial
         return {"error": s(exc, 200)}
@@ -63,8 +69,8 @@ def rule_stats(conn: Any, top: int = 20) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("rule_stats")))
         stats = [
             {
-                "uuid": s(pick(r, "uuid", "id", "tracker", "rule")),
-                "description": s(pick(r, "description", "descr", "label")),
+                "uuid": opt(pick(r, "uuid", "id", "tracker", "rule")),
+                "description": opt(pick(r, "description", "descr", "label")),
                 "evaluations": num(pick(r, "evaluations", "evals", "pcnt", default=0)),
                 "packets": num(pick(r, "packets", "pkts", default=0)),
                 "bytes": num(pick(r, "bytes", "bytes_total", default=0)),
@@ -83,12 +89,12 @@ def rule_states(conn: Any, top: int = 50) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("rule_states")))
         states = [
             {
-                "interface": s(pick(r, "interface", "if", "ifname")),
-                "protocol": s(pick(r, "proto", "protocol")),
-                "source": s(pick(r, "src", "source", "src_addr")),
-                "destination": s(pick(r, "dst", "destination", "dst_addr")),
-                "state": s(pick(r, "state", "status")),
-                "age": s(pick(r, "age", "creation")),
+                "interface": opt(pick(r, "interface", "if", "ifname")),
+                "protocol": opt(pick(r, "proto", "protocol")),
+                "source": opt(pick(r, "src", "source", "src_addr")),
+                "destination": opt(pick(r, "dst", "destination", "dst_addr")),
+                "state": opt(pick(r, "state", "status")),
+                "age": opt(pick(r, "age", "creation")),
             }
             for r in rows
         ]

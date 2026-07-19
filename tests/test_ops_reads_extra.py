@@ -238,7 +238,8 @@ def test_firewall_log_no_action_returns_all():
         ]}
     })
     out = diag.firewall_log(conn)
-    assert out["total"] == 2 and out["action"] == "all"
+    assert out["returned"] == 2 and out["action"] == "all"
+    assert out["truncated"] is False and out["limit"] == 200
 
 
 @pytest.mark.unit

@@ -75,7 +75,7 @@ def tool_errors(shape: str = "dict") -> Callable:
 mcp = FastMCP(
     "firewall-aiops",
     instructions=(
-        "Firewall operations (preview) over OPNsense and pfSense: firmware/health, "
+        "Firewall operations over OPNsense and pfSense: firmware/health, "
         "interfaces and gateways; firewall rules with hit-counts, states, and "
         "shadow analysis; NAT (port-forward / outbound / 1:1); aliases; VPN "
         "(WireGuard / OpenVPN / IPsec); DHCP leases + static mappings; and "

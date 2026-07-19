@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import as_obj, num, pick, s, to_bool
+from firewall_aiops.ops._util import as_obj, num, opt, pick, s, to_bool
 
 
 def firmware_status(conn: Any) -> dict:
@@ -21,12 +21,12 @@ def firmware_status(conn: Any) -> dict:
         obj = as_obj(pick(obj, "data")) or obj
         return {
             "platform": conn.target.platform,
-            "version": s(pick(obj, "product_version", "version", "installed_version")),
-            "product": s(pick(obj, "product_name", "product", "base", "config_version")),
+            "version": opt(pick(obj, "product_version", "version", "installed_version")),
+            "product": opt(pick(obj, "product_name", "product", "base", "config_version")),
             "updatesAvailable": to_bool(
                 pick(obj, "status", "updates", "needs_update", default=False)
             ),
-            "lastCheck": s(pick(obj, "last_check", "updated", "download_size")),
+            "lastCheck": opt(pick(obj, "last_check", "updated", "download_size")),
         }
     except Exception as exc:  # noqa: BLE001 — report as partial
         return {"error": s(exc, 200)}
@@ -39,12 +39,12 @@ def health_status(conn: Any) -> dict:
         obj = as_obj(pick(obj, "data")) or obj
         return {
             "platform": conn.target.platform,
-            "hostname": s(pick(obj, "hostname", "name")),
-            "uptime": s(pick(obj, "uptime", "uptime_seconds")),
+            "hostname": opt(pick(obj, "hostname", "name")),
+            "uptime": opt(pick(obj, "uptime", "uptime_seconds")),
             "cpuPercent": num(pick(obj, "cpu", "cpu_usage", "cpu_load", default=0)),
             "memPercent": num(pick(obj, "memory", "mem_usage", "memory_used_percent", default=0)),
-            "loadAverage": s(pick(obj, "loadavg", "load_average", "load")),
-            "versions": s(pick(obj, "versions", "kernel", "biosdate")),
+            "loadAverage": opt(pick(obj, "loadavg", "load_average", "load")),
+            "versions": opt(pick(obj, "versions", "kernel", "biosdate")),
         }
     except Exception as exc:  # noqa: BLE001 — report as partial
         return {"error": s(exc, 200)}
@@ -57,11 +57,11 @@ def interface_status(conn: Any) -> dict:
         rows = _interface_rows(conn, raw)
         ifaces = [
             {
-                "name": s(pick(r, "name", "device", "descr", "if")),
-                "description": s(pick(r, "description", "descr", "friendlyname")),
-                "status": s(pick(r, "status", "linkstate", "state")),
+                "name": opt(pick(r, "name", "device", "descr", "if")),
+                "description": opt(pick(r, "description", "descr", "friendlyname")),
+                "status": opt(pick(r, "status", "linkstate", "state")),
                 "up": to_bool(pick(r, "status", "enabled", "linkstate", default=False)),
-                "address": s(pick(r, "ipaddr", "address", "ip", "ipv4")),
+                "address": opt(pick(r, "ipaddr", "address", "ip", "ipv4")),
             }
             for r in rows
         ]
@@ -91,9 +91,9 @@ def gateway_status(conn: Any) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("gateways")))
         gws = [
             {
-                "name": s(pick(r, "name", "gateway", "gwname")),
-                "address": s(pick(r, "address", "monitorip", "gateway_ip")),
-                "status": s(pick(r, "status", "status_translated", "state")),
+                "name": opt(pick(r, "name", "gateway", "gwname")),
+                "address": opt(pick(r, "address", "monitorip", "gateway_ip")),
+                "status": opt(pick(r, "status", "status_translated", "state")),
                 "lossPercent": num(_strip_pct(pick(r, "loss", "loss_percent", default=0))),
                 "rttMs": num(_strip_unit(pick(r, "delay", "rtt", "latency", default=0))),
                 "stddevMs": num(_strip_unit(pick(r, "stddev", "rttsd", default=0))),

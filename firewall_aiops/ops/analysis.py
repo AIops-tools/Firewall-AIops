@@ -142,13 +142,15 @@ def _covers(earlier: dict, later: dict) -> bool:
 
 
 def _sig(rule: dict) -> tuple:
+    # ``or ""`` rather than a get-default: these fields are null when the API
+    # did not report them, and str(None) would signature them as "none".
     return (
-        str(rule.get("action", "")).lower(),
-        str(rule.get("interface", "")).lower(),
-        str(rule.get("protocol", "")).lower(),
-        str(rule.get("source", "")).lower(),
-        str(rule.get("destination", "")).lower(),
-        str(rule.get("destinationPort", "")).lower(),
+        str(rule.get("action") or "").lower(),
+        str(rule.get("interface") or "").lower(),
+        str(rule.get("protocol") or "").lower(),
+        str(rule.get("source") or "").lower(),
+        str(rule.get("destination") or "").lower(),
+        str(rule.get("destinationPort") or "").lower(),
     )
 
 
@@ -262,7 +264,7 @@ def blocked_traffic_rca(log_entries: list[dict], top: int = 20) -> dict:
     port scan, a service probe/brute-force, or generic — with a recommended
     action. Every entry carries its numbers.
     """
-    blocked = [e for e in (log_entries or []) if str(e.get("action", "")).lower() == "block"]
+    blocked = [e for e in (log_entries or []) if str(e.get("action") or "").lower() == "block"]
     by_source: dict[str, dict] = {}
     for e in blocked:
         src = s(e.get("source")) or "(unknown)"

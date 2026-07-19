@@ -36,6 +36,7 @@ from firewall_aiops.governance.audit import detect_agent, get_engine
 from firewall_aiops.governance.budget import BudgetExceeded, get_budget
 from firewall_aiops.governance.patterns import PatternMatch, get_pattern_engine
 from firewall_aiops.governance.policy import PolicyResult, get_policy_engine
+from firewall_aiops.governance.readonly import is_read_only, read_only_denial
 from firewall_aiops.governance.sanitize import sanitize
 
 _log = logging.getLogger("firewall-aiops.decorators")
@@ -233,6 +234,17 @@ def _pre_check(state: _CallState) -> None:
     never block the call (fail-open by design — a broken pattern file must
     not take down every MCP tool).
     """
+    # Read-only mode is a hard switch, checked before policy so that no write
+    # reaches an API regardless of entry point (MCP, CLI, or in-process) and
+    # regardless of what rules.yaml says. risk_level 'low' == a read.
+    if state.risk_level != "low" and is_read_only():
+        reason = read_only_denial(state.tool_name)
+        denial = PolicyResult(allowed=False, rule="read_only", reason=reason)
+        state.policy_result = denial
+        state.status = "denied"
+        state.result = {"error": reason, "rule": denial.rule}
+        raise PolicyDenied(denial)
+
     state.policy_result = state.policy.check_allowed(
         state.tool_name,
         env=state.env,

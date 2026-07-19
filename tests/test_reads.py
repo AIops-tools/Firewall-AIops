@@ -191,7 +191,8 @@ def test_firewall_log_action_filter():
         ]}
     })
     out = diag.firewall_log(conn, action="block")
-    assert out["total"] == 1 and out["entries"][0]["source"] == "9.9.9.9"
+    assert out["returned"] == 1 and out["entries"][0]["source"] == "9.9.9.9"
+    assert out["truncated"] is False
 
 
 @pytest.mark.unit

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import pick, s, to_bool
+from firewall_aiops.ops._util import opt, pick, s, to_bool
 
 
 def leases(conn: Any, online_only: bool = False) -> dict:
@@ -17,13 +17,13 @@ def leases(conn: Any, online_only: bool = False) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("dhcp_leases")))
         entries = [
             {
-                "ip": s(pick(r, "address", "ip", "ipaddr")),
-                "mac": s(pick(r, "mac", "hwaddr", "mac_address")),
-                "hostname": s(pick(r, "hostname", "client-hostname", "descr")),
-                "state": s(pick(r, "state", "status", "act")),
+                "ip": opt(pick(r, "address", "ip", "ipaddr")),
+                "mac": opt(pick(r, "mac", "hwaddr", "mac_address")),
+                "hostname": opt(pick(r, "hostname", "client-hostname", "descr")),
+                "state": opt(pick(r, "state", "status", "act")),
                 "online": to_bool(pick(r, "online", "status", default=False)),
-                "starts": s(pick(r, "starts", "start")),
-                "ends": s(pick(r, "ends", "end", "expires")),
+                "starts": opt(pick(r, "starts", "start")),
+                "ends": opt(pick(r, "ends", "end", "expires")),
             }
             for r in rows
         ]
@@ -40,10 +40,10 @@ def static_mappings(conn: Any) -> dict:
         rows = conn.platform.rows(conn.get(conn.platform.path("dhcp_static")))
         maps = [
             {
-                "mac": s(pick(r, "mac", "hwaddr", "mac_address")),
-                "ip": s(pick(r, "ipaddr", "ip", "address")),
-                "hostname": s(pick(r, "hostname", "host")),
-                "description": s(pick(r, "descr", "description")),
+                "mac": opt(pick(r, "mac", "hwaddr", "mac_address")),
+                "ip": opt(pick(r, "ipaddr", "ip", "address")),
+                "hostname": opt(pick(r, "hostname", "host")),
+                "description": opt(pick(r, "descr", "description")),
             }
             for r in rows
         ]
