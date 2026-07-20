@@ -24,6 +24,31 @@ rules_app = typer.Typer(
 )
 
 
+def _require_ok(result: dict) -> dict:
+    """Surface a governed tool's sanitised ``{"error": ...}`` as a CLI failure.
+
+    The governed twins are wrapped in ``@tool_errors``, which turns a refusal
+    into an error dict rather than an exception — without this the CLI would
+    print a DRY-RUN banner over a refusal.
+    """
+    if isinstance(result, dict) and result.get("error"):
+        console.print(f"[red]Error: {result['error']}[/]")
+        raise typer.Exit(1)
+    return result
+
+
+def _print_management_impact(impact: dict | None) -> None:
+    """Render the lockout warning in the human-readable banner, not as raw JSON."""
+    if not impact:
+        return
+    colour = "bold red" if impact.get("certain") else "yellow"
+    console.print(f"[{colour}]  Management impact: {impact.get('finding', '')}[/]")
+    warnings = impact.get("warnings") or []
+    if warnings:
+        console.print(f"[{colour}]  Uncertain because: {', '.join(warnings)}[/]")
+    console.print(f"[{colour}]  {impact.get('action_hint', '')}[/]")
+
+
 @rules_app.command("list")
 @cli_errors
 def rules_list(
@@ -65,8 +90,15 @@ def rules_toggle(
 
     verb = "enable" if enable else "disable"
     if dry_run:
+        # Through the GOVERNED twin: the preview then reports the same
+        # management-plane impact AND lands the same audit row as the real call.
+        preview = gov.toggle_rule(uuid=uuid, enable=enable, target=target, dry_run=True)
+        _require_ok(preview)
         dry_run_print(operation="toggle_rule", api_call=f"{verb} rule",
                       parameters={"uuid": uuid, "enable": enable})
+        _print_management_impact(preview.get("managementImpact"))
         return
     double_confirm(f"{verb} rule", uuid)
-    console.print_json(json.dumps(gov.toggle_rule(uuid=uuid, enable=enable, target=target)))
+    result = gov.toggle_rule(uuid=uuid, enable=enable, target=target)
+    _require_ok(result)
+    console.print_json(json.dumps(result))

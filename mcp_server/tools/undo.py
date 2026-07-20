@@ -41,6 +41,11 @@ def undo_list(limit: int = 50, target: Optional[str] = None) -> dict:
     length coincidence: when it is true there are MORE tokens than shown, so
     re-run with a higher ``limit`` rather than reporting the list as complete.
 
+    Each entry carries ``effectVerified``. False means the original write lost
+    its response, so the change it reverses is PROBABLE, not confirmed — check
+    the live state before applying, and do not report the result as a restore
+    of a state that may never have been reached.
+
     Args:
         limit: Max rows to return (default 50, capped at 500).
         target: Unused (undo state is host-local); accepted for CLI uniformity.
@@ -61,6 +66,7 @@ def undo_list(limit: int = 50, target: Optional[str] = None) -> dict:
                 "originalTool": r["tool"],
                 "inverseTool": r["undo_tool"],
                 "note": r.get("note", ""),
+                "effectVerified": bool(r.get("effect_verified", 1)),
             }
             for r in rows
         ],
@@ -105,10 +111,12 @@ def undo_apply(undo_id: str, dry_run: bool = False, target: Optional[str] = None
             f"Inverse tool '{inverse_tool}' is not registered on this server; cannot apply."
         )
 
+    effect_verified = bool(rec.get("effect_verified", 1))
     if dry_run:
         return {
             "dryRun": True,
             "undoId": undo_id,
+            "effectVerified": effect_verified,
             "wouldApply": {"tool": inverse_tool, "params": params},
         }
 
@@ -127,6 +135,15 @@ def undo_apply(undo_id: str, dry_run: bool = False, target: Optional[str] = None
     return {
         "undoId": undo_id,
         "applied": applied,
+        "effectVerified": effect_verified,
         "inverseTool": inverse_tool,
         "result": result,
+        "note": (
+            ""
+            if effect_verified
+            else "The original write lost its response, so it was never confirmed "
+            "to have taken effect. This inverse ran regardless; report the "
+            "CURRENT server state, not a restore that may have had nothing "
+            "to restore."
+        ),
     }

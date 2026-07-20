@@ -77,7 +77,12 @@ def test_capture_alias_survives_non_dict():
 def test_apply_changes_posts_apply_path():
     conn = _conn(OPNSENSE)
     out = ops.apply_changes(conn)
-    assert out == {"action": "apply_changes", "platform": OPNSENSE, "applied": True}
+    assert out["action"] == "apply_changes"
+    assert out["platform"] == OPNSENSE
+    assert out["applied"] is True
+    assert out["override"] is False
+    # No staged rule threatens the management path here (see test_lockout_guards).
+    assert out["managementImpact"] is None
     conn.post.assert_called_once_with("/api/firewall/filter/apply")
 
 
@@ -97,7 +102,10 @@ def test_reconfigure_sends_subsystem():
 def test_kill_states_opnsense_posts_filter():
     conn = _conn(OPNSENSE)
     out = ops.kill_states(conn, "9.9.9.9")
-    assert out == {"action": "kill_states", "filter": "9.9.9.9"}
+    assert out["action"] == "kill_states"
+    assert out["filter"] == "9.9.9.9"
+    # The flush drops this tool's own connection state; the result has to say so.
+    assert "lost response" in out["note"]
     _path, kwargs = conn.post.call_args
     assert kwargs["json"] == {"filter": "9.9.9.9"}
 

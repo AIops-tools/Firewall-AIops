@@ -48,7 +48,10 @@ def test_opt_str_distinguishes_absent_from_empty():
 @pytest.mark.unit
 def test_opt_str_still_sanitizes_and_truncates():
     assert opt_str("a\x00b") == "ab"  # control character stripped
-    assert opt_str("abcdef", 3) == "abc"
+    # A cut announces itself: the ellipsis is the only signal a reader gets
+    # that what they are looking at is not the whole value.
+    assert opt_str("abcdef", 3) == "ab\u2026"
+    assert opt_str("abc", 3) == "abc"  # exactly at the cap is not truncated
 
 
 @pytest.mark.unit

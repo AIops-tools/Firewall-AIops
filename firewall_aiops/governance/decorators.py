@@ -34,6 +34,11 @@ from typing import Any
 
 from firewall_aiops.governance.audit import detect_agent, get_engine
 from firewall_aiops.governance.budget import BudgetExceeded, get_budget
+from firewall_aiops.governance.outcome import (
+    clear_prior_state,
+    is_unknown,
+    take_prior_state,
+)
 from firewall_aiops.governance.patterns import PatternMatch, get_pattern_engine
 from firewall_aiops.governance.policy import PolicyResult, get_policy_engine
 from firewall_aiops.governance.readonly import is_read_only, read_only_denial
@@ -155,7 +160,7 @@ class _CallState:
         "skill", "tool_name", "agent", "start", "status", "result",
         "policy_result", "pattern_match", "audit", "policy",
         "safe_params", "env", "risk_level", "timeout_seconds",
-        "rationale", "approved_by", "risk_tier", "undo",
+        "rationale", "approved_by", "risk_tier", "undo", "dry_run",
     )
 
     def __init__(
@@ -169,6 +174,10 @@ class _CallState:
         timeout_seconds: int,
         undo: Any = None,
     ) -> None:
+        # A previous call on this thread/task may have captured before-state
+        # that its own wrapper never consumed (it raised past _annotate_result).
+        # Start clean so one call's prior state can never be recorded as another's.
+        clear_prior_state()
         self.undo = undo
         self.skill = _infer_skill(func)
         self.tool_name = func.__name__
@@ -187,6 +196,10 @@ class _CallState:
         # log and participate in env scoping (previously only kwargs did).
         params = _bind_params(signature, args, kwargs)
         self.safe_params = _redact(params, sensitive)
+        # Previews are governed like any other call — audited, policy-checked,
+        # budget-counted — but they change nothing, so two things must not apply
+        # to them: the named-approver gate, and undo recording.
+        self.dry_run = bool(params.get("dry_run", False))
         env = params.get("target", params.get("env", ""))
         self.env = str(env) if env else ""
 
@@ -269,7 +282,15 @@ def _pre_check(state: _CallState) -> None:
         params=state.safe_params,
     )
     state.risk_tier = tier.tier
-    if tier.requires_approver and not state.approved_by:
+    # A preview is not the operation. Requiring a named human approver before a
+    # caller may ask "would this even be permitted?" inverts what a preview is
+    # for — you would have to obtain the approval in order to learn whether the
+    # thing needs one, or would be refused outright. The tier is still computed
+    # and still audited, so the preview can TELL the caller an approver will be
+    # needed; it just does not demand one to answer. Deny rules, budget, the
+    # read-only switch and every self-lockout guard still apply, and the write
+    # itself is gated normally.
+    if tier.requires_approver and not state.approved_by and not state.dry_run:
         reason = (
             f"Operation '{state.tool_name}' on '{state.env or 'target'}' requires "
             f"'{tier.tier}' approval (rule: {tier.rule}) but no approver is recorded. "
@@ -322,17 +343,51 @@ def _annotate_result(state: _CallState, result: Any) -> Any:
 
 
 def _record_undo(state: _CallState, result: Any) -> None:
-    """Compute and persist the inverse descriptor for a successful write.
+    """Compute and persist the inverse descriptor for a write.
 
-    Best-effort: a broken undo callable or store must never fail the call.
-    Attaches ``_undo_id`` to dict results so the agent / pilot can reference it.
+    Two paths:
+
+    * **Confirmed** — the tool returned normally, so ``result`` carries the
+      before-state its undo callable needs. Recorded ``effect_verified=True``.
+    * **Undetermined** — the response was lost (see
+      :mod:`firewall_aiops.governance.outcome`). The change may be live, so an
+      inverse still matters, but ``result`` is only an error payload. An
+      inverse is recorded ONLY when the write explicitly stashed its
+      before-state via ``capture_prior_state``; synthesizing one from an
+      empty result would produce a *wrong* inverse, which is worse than none.
+
+    Best-effort throughout: a broken undo callable or store must never fail
+    the call. Attaches ``_undo_id`` to dict results for later reference.
     """
     if state.undo is None:
         return
-    if isinstance(result, dict) and result.get("error"):
-        return  # sanitized failure — no change happened, so no inverse to record
+    if state.dry_run:
+        # A preview changed nothing, so there is nothing to invert — and the
+        # descriptor it would produce is actively dangerous. An undo callable
+        # reads the before-state out of the result, and a preview has none, so
+        # permissive defaults (``(result.get("priorState") or {}).get("running",
+        # True)``) fill the gap with a guess. That yielded a REAL, applicable
+        # start_container token for a stop that never happened.
+        return
+
+    verified = True
+    undo_input = result
+    if is_unknown(result):
+        prior = take_prior_state()
+        if prior is None:
+            _log.warning(
+                "%s.%s outcome undetermined and no prior state captured — "
+                "no inverse recorded; the change may be live and unrecorded",
+                state.skill, state.tool_name,
+            )
+            return
+        verified = False
+        undo_input = {"priorState": prior, "outcomeUnknown": True}
+    elif isinstance(result, dict) and result.get("error"):
+        return  # definite failure — no change happened, so no inverse
+
     try:
-        descriptor = state.undo(state.safe_params, result)
+        descriptor = state.undo(state.safe_params, undo_input)
     except Exception:  # noqa: BLE001 — undo computation must not fail the call
         _log.warning("undo callable for %s.%s raised", state.skill, state.tool_name,
                      exc_info=True)
@@ -347,6 +402,7 @@ def _record_undo(state: _CallState, result: Any) -> None:
             tool=state.tool_name,
             undo_descriptor=descriptor,
             orig_params=state.safe_params,
+            effect_verified=verified,
         )
         if undo_id and isinstance(result, dict):
             result.setdefault("_undo_id", undo_id)
@@ -374,7 +430,7 @@ def _finalize(state: _CallState) -> None:
     # dicts BEFORE this harness sees them) must not be audited as success —
     # compliance exception reports are built from this status.
     if state.status == "ok" and isinstance(state.result, dict) and state.result.get("error"):
-        state.status = "error"
+        state.status = "unknown" if is_unknown(state.result) else "error"
 
     duration = int((time.time() - state.start) * 1000)
 

@@ -85,10 +85,25 @@ class Platform:
     default_port: int
     paths: dict[str, str] = field(default_factory=dict)
     api_key_header: str = "X-API-Key"
+    # Services that serve THIS platform's own management API. Restarting one of
+    # them cuts the connection the tool is issuing the restart over — and the
+    # undo with it. A platform descriptor already knows which daemon answers its
+    # own URLs, so the knowledge belongs here rather than in a caller's guesswork.
+    api_services: tuple[str, ...] = ()
 
     @property
     def uses_basic_auth(self) -> bool:
         return self.auth_style == AUTH_BASIC
+
+    def serves_own_api(self, service: str) -> bool:
+        """Whether restarting ``service`` would cut this platform's own API.
+
+        Exact, case-insensitive membership of the descriptor's static list —
+        nothing is inferred. An unrecognised service name is NOT treated as
+        dangerous, so a legitimate restart (unbound, dhcpd, openvpn, ...) is
+        never blocked by a guess.
+        """
+        return str(service).strip().lower() in self.api_services
 
     def path(self, resource: str, **fmt: Any) -> str:
         """Return the concrete REST path for a logical ``resource``.
@@ -250,6 +265,18 @@ _PFSENSE_PATHS = {
 }
 
 
+# Services that answer each platform's own management API. OPNsense serves its
+# GUI/API from nginx and dispatches every write through the configd daemon;
+# pfSense serves its webConfigurator (and the REST package) from lighttpd. The
+# generic aliases are included because that is what an agent asked to "restart
+# the web service" will actually pass.
+_OPNSENSE_API_SERVICES = (
+    "nginx", "configd", "php-fpm", "webgui", "web", "webserver", "gui", "api", "lighttpd",
+)
+_PFSENSE_API_SERVICES = (
+    "lighttpd", "php-fpm", "webgui", "web", "webserver", "gui", "api", "nginx",
+)
+
 register(
     Platform(
         name=OPNSENSE,
@@ -257,6 +284,7 @@ register(
         auth_style=AUTH_BASIC,
         default_port=443,
         paths=_OPNSENSE_PATHS,
+        api_services=_OPNSENSE_API_SERVICES,
     )
 )
 register(
@@ -266,6 +294,7 @@ register(
         auth_style=AUTH_HEADER_KEY,
         default_port=443,
         paths=_PFSENSE_PATHS,
+        api_services=_PFSENSE_API_SERVICES,
     )
 )
 

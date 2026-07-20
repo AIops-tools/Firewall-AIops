@@ -44,7 +44,7 @@ export FIREWALL_READ_ONLY=1
 ```
 
 With that set, the **9 write tools are never registered**. An MCP client
-lists **25 tools instead of 34** — the writes are not hidden, not
+lists **26 tools instead of 35** — the writes are not hidden, not
 gated behind a flag, and not merely refused when called. They are absent from
 the session. A model cannot invoke a tool it was never offered, and cannot be
 argued into one.
@@ -74,7 +74,7 @@ Running a smaller / local model? See
 the guardrails this tool now enforces for you (so you don't spend prompt budget
 restating them) and gives a ready-made system prompt for what's left.
 
-## Tool inventory (34 tools)
+## Tool inventory (35 tools)
 
 | Domain | Tools | # | Kind |
 |--------|-------|:-:|------|
@@ -148,6 +148,7 @@ targets:
     platform: pfsense
     host: 192.0.2.2
     verify_ssl: false
+    scheme: http             # https (default) | http — for a GUI behind a TLS-terminating proxy
 ```
 
 The **secret** — the OPNsense API *secret* (paired with the key for HTTP Basic auth)

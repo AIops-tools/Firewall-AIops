@@ -13,6 +13,7 @@ harness is a guarantee. Anything below that we could move into the harness, we d
 
 | You might be tempted to prompt | Why you don't need to |
 |---|---|
+| "Never restart the web GUI / lock yourself out" | **Already enforced.** `restart_service` refuses the daemon serving this appliance's own API (`nginx`, `lighttpd`, `configd`, `webgui`, ...), and `apply_changes` / `reconfigure` refuse a staged rule set that would provably cut management access. Both are exact and fail open — see `capabilities.md`. Do not spend prompt budget on it. |
 | "Work read-only, never change a rule" | Set `FIREWALL_READ_ONLY=1`. The nine write tools (`toggle_rule`, `apply_changes`, `add_alias_entry`, `remove_alias_entry`, `kill_states`, `restart_service`, `reconfigure`, `reboot`, `undo_apply`) are then **not registered at all** — they never appear in the tool list, so the model cannot call one even if it tries. The `@governed_tool` harness independently refuses writes, so the CLI is covered too. |
 | "Don't invent a value when a field is missing" | OPNsense and pfSense populate different keys for the same concept. A field neither platform returned comes back as `null`, never as `""`. Absent and empty are distinguishable in the payload. |
 | "Tell me if the output was cut off" | `firewall_log`, `states_table` and `top_talkers` return `{"entries": [...], "returned": N, "limit": L, "truncated": true/false}`. Truncation is measured, not guessed from a length coincidence. |

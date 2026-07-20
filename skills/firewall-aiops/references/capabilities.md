@@ -1,6 +1,6 @@
 # firewall-aiops capabilities
 
-> **34 MCP tools** (25 read, 9 write) across OPNsense (REST `/api/...`, API key+secret
+> **35 MCP tools** (26 read, 9 write) across OPNsense (REST `/api/...`, API key+secret
 > via HTTP Basic) and pfSense (REST v2 `/api/v2/...`, API key via `X-API-Key`). The
 > concrete REST paths below are modelled from each project's public API and have not
 > yet been exercised against a live firewall — see `docs/VERIFICATION.md`.
@@ -25,6 +25,7 @@ tool name resolves to the right path on each firewall via the platform registry.
 | `rule_detail` | `/api/firewall/filter/getRule/{uuid}` | `/api/v2/firewall/rule?id=` | one rule's full detail |
 | `rule_stats` | `/api/diagnostics/firewall/pfStatistics` | `/api/v2/firewall/rules` | per-rule hit counts / evaluations, busiest first |
 | `rule_states` | `/api/diagnostics/firewall/queryStates` | `/api/v2/diagnostics/states` | active state-table entries tied to rules |
+| `pending_changes` | (derived from `searchRule`) | (derived from `firewall/rules`) | the staged rule set `apply_changes` would commit + its lockout assessment |
 
 ## NAT (read)
 
@@ -80,8 +81,8 @@ tool name resolves to the right path on each firewall via the platform registry.
 | `add_alias_entry` | **med** | OPNsense `alias_util/add/{name}`; pfSense `firewall/alias` | captures prior entries; undo removes the added entry |
 | `remove_alias_entry` | **med** | OPNsense `alias_util/delete/{name}`; pfSense `firewall/alias` | captures prior entries; undo adds it back |
 | `kill_states` | **med** | `diagnostics/…/killStates` / `diagnostics/states` | flush pf states (optionally one source IP) |
-| `restart_service` | **med** | `service/restart/{service}` | restart a firewall service |
-| `apply_changes` | **HIGH** | `filter/apply` / `firewall/apply` | commit staged config — makes edits live; `dry_run` + approver |
+| `restart_service` | **med** | `service/restart/{service}` | restart a firewall service; **refuses** the daemon serving this appliance's own API |
+| `apply_changes` | **HIGH** | `filter/apply` / `firewall/apply` | commit staged config — makes edits live; `dry_run` returns the staged set; **refuses** a provable lockout (`override=True` to force); approver required |
 | `reconfigure` | **HIGH** | `filter/savepoint` / `firewall/apply` | reload/commit a subsystem; `dry_run` + approver |
 | `reboot` | **HIGH** | `core/system/reboot` / `diagnostics/reboot` | IRREVERSIBLE — audit only, no undo; `dry_run` + approver |
 
@@ -91,3 +92,93 @@ tool name resolves to the right path on each firewall via the platform registry.
   entry add/remove today).
 - Cloud security groups and vendor firewall appliances.
 - **Missing something? Open an issue or PR** — contributions welcome.
+
+## Self-lockout guards
+
+A firewall is the one appliance where a routine write severs the connection
+carrying it — and the recorded undo needs that same connection. Three writes
+refuse rather than let that happen. All of them are **exact** and **fail open**.
+
+### `restart_service`
+
+Refuses the daemon that answers this platform's own management API — OPNsense
+`nginx` / `configd` / `php-fpm`, pfSense `lighttpd` / `php-fpm`, plus the
+generic aliases (`webgui`, `web`, `webserver`, `gui`, `api`) an agent told
+"restart the web service" would actually pass. The list lives on the `Platform`
+descriptor, which already knows which daemon serves its own URLs. Matching is
+exact and case-insensitive; an unrecognised service name is never blocked on a
+guess, so `unbound`, `dhcpd`, `openvpn`, `ipsec` and friends restart normally.
+
+### `apply_changes` / `reconfigure filter`
+
+Both read the staged rule set first (see `pending_changes`) and refuse when
+committing it would provably cut management access. Two mirror-image shapes are
+dangerous:
+
+- a **disabled `pass`** rule that permits management access — applying removes the permit;
+- an **enabled `block`** rule that covers it — applying starts blocking.
+
+"Provably" means a literal match on **both** the management host and port.
+Everything short of that fails open with a named warning and proceeds:
+
+| Warning | Meaning |
+|---|---|
+| `ALIAS_DESTINATION` | destination is an alias; it may resolve to the management address |
+| `ANY_DESTINATION` | destination is `any` / a CIDR that may contain the host |
+| `ANY_PORT` | no destination port — may include the management port |
+| `PORT_RANGE` | port expression could not be parsed to a range |
+| `INTERFACE_GROUP` | rule is on `any` / an interface group |
+
+`override=True` proceeds despite a certain finding — for operators with console
+access who mean it. A rule set that cannot be READ does not block either, but is
+reported as `assessed: false` with the error rather than as a clean bill of
+health (a failed probe is not "nothing pending").
+
+### `toggle_rule`
+
+Runs the same assessment at staging time — the cheapest point to warn, since the
+rule row is already in hand — and reports `managementImpact` in both directions.
+Advisory only: staging is never blocked, because `apply_changes` is where the
+change becomes real and where the refusal lives.
+
+### `dry_run` does not bypass the guards
+
+A `dry_run` whose honest answer is "this would be refused" **refuses**. Previewing
+success for a call that is then refused is the preview being wrong, and a weak
+model reads the later refusal as transient and retries it. So:
+
+- `apply_changes(dry_run=True)` / `reconfigure(subsystem="filter", dry_run=True)`
+  run the lockout guard before returning, and honour `override=True` on both paths.
+- `restart_service(dry_run=True)` refuses an API-serving service name.
+
+- `toggle_rule(dry_run=True)` reads the rule and reports the same
+  `managementImpact` the real call would.
+
+Fail-open semantics are **identical** on both paths — a dry-run never refuses
+what the real call would allow.
+
+The CLI's `rules toggle --dry-run` routes through the governed twin, so it
+reaches the same assessment **and** records the same audit row. The line's
+invariant is: **a dry_run MAY read; it must never write.** A preview that cannot
+read cannot answer "would this be refused?", so reads are expected; the mutating
+POST/PATCH is the thing that must never happen. (`apply_changes`,
+`reconfigure`, `restart_service`, `kill_states` and `reboot` have no CLI command
+— they are MCP-only — so `rules toggle` is the whole CLI write surface.)
+
+### `kill_states` is a lost response, not a lockout
+
+Flushing the pf state table drops the state entry for this tool's own
+connection, so the call can appear to fail even though the flush ran. Access is
+NOT lost: the permitting rule is untouched and the next call re-establishes
+state. The dry-run says so in `sessionImpact`, and the result repeats it in
+`note`. **Do not retry blindly** — the flush is likely already done.
+
+### Reversible writes survive a lost response
+
+`toggle_rule`, `add_alias_entry` and `remove_alias_entry` stash their before-state
+via `capture_prior_state()` immediately before the mutating request. If the
+response is lost, the harness records `status=unknown` (not a false `error`) and
+can still record the inverse, flagged `effectVerified=false`. The irreversible
+writes (`apply_changes`, `reconfigure`, `restart_service`, `kill_states`,
+`reboot`) declare no inverse, so they capture nothing — there is nothing to
+replay.

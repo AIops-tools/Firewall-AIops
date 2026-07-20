@@ -42,21 +42,31 @@ _BUSY_TIMEOUT_MS = 5000
 
 _CREATE_TABLE = """\
 CREATE TABLE IF NOT EXISTS undo_log (
-    undo_id     TEXT PRIMARY KEY,
-    ts          TEXT NOT NULL,
-    skill       TEXT NOT NULL DEFAULT '',
-    tool        TEXT NOT NULL DEFAULT '',
-    undo_skill  TEXT NOT NULL DEFAULT '',
-    undo_tool   TEXT NOT NULL DEFAULT '',
-    undo_params TEXT NOT NULL DEFAULT '{}',
-    orig_params TEXT NOT NULL DEFAULT '{}',
-    status      TEXT NOT NULL DEFAULT 'recorded',
-    workflow_id TEXT NOT NULL DEFAULT '',
-    note        TEXT NOT NULL DEFAULT ''
+    undo_id        TEXT PRIMARY KEY,
+    ts             TEXT NOT NULL,
+    skill          TEXT NOT NULL DEFAULT '',
+    tool           TEXT NOT NULL DEFAULT '',
+    undo_skill     TEXT NOT NULL DEFAULT '',
+    undo_tool      TEXT NOT NULL DEFAULT '',
+    undo_params    TEXT NOT NULL DEFAULT '{}',
+    orig_params    TEXT NOT NULL DEFAULT '{}',
+    status         TEXT NOT NULL DEFAULT 'recorded',
+    workflow_id    TEXT NOT NULL DEFAULT '',
+    note           TEXT NOT NULL DEFAULT '',
+    effect_verified INTEGER NOT NULL DEFAULT 1
 )
 """
 
 _CREATE_INDEX = "CREATE INDEX IF NOT EXISTS idx_undo_status ON undo_log(status)"
+
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
+# existing DB untouched, so each one needs an explicit ALTER. The default must
+# describe the rows already there: every pre-existing token was recorded on the
+# confirmed path, so effect_verified=1 is accurate for them, not just convenient.
+_MIGRATIONS = (
+    ("effect_verified", "ALTER TABLE undo_log ADD COLUMN "
+                        "effect_verified INTEGER NOT NULL DEFAULT 1"),
+)
 
 
 class UndoStore:
@@ -70,6 +80,7 @@ class UndoStore:
             conn = self._connect()
             conn.execute(_CREATE_TABLE)
             conn.execute(_CREATE_INDEX)
+            _migrate(conn)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.commit()
             conn.close()
@@ -104,12 +115,19 @@ class UndoStore:
         undo_descriptor: dict[str, Any],
         orig_params: dict[str, Any] | None = None,
         workflow_id: str = "",
+        effect_verified: bool = True,
     ) -> str | None:
         """Persist an inverse descriptor; return its undo_id (or None on failure).
 
         ``undo_descriptor`` must carry at least ``tool`` (the inverse tool) and
         ``params``; ``skill`` defaults to the original skill. Never raises —
         recording must not break the underlying tool call.
+
+        ``effect_verified=False`` marks a token whose *original* write lost
+        its response: the change is probably live but unconfirmed. The token
+        stays listable and appliable — an unconfirmed change is exactly when
+        a rollback is most wanted — but the flag travels with it so an
+        operator is never told a state was restored that was never reached.
         """
         if not self._ok:
             return None
@@ -121,8 +139,9 @@ class UndoStore:
             conn = self._connect()
             conn.execute(
                 "INSERT INTO undo_log (undo_id, ts, skill, tool, undo_skill, undo_tool, "
-                "undo_params, orig_params, status, workflow_id, note) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'recorded', ?, ?)",
+                "undo_params, orig_params, status, workflow_id, note, "
+                "effect_verified) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'recorded', ?, ?, ?)",
                 (
                     undo_id,
                     datetime.now(tz=UTC).isoformat(),
@@ -134,6 +153,7 @@ class UndoStore:
                     _safe_json(orig_params or {}),
                     workflow_id,
                     str(undo_descriptor.get("note", "")),
+                    1 if effect_verified else 0,
                 ),
             )
             conn.commit()
@@ -186,6 +206,25 @@ class UndoStore:
             return cur.rowcount > 0
         finally:
             conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply additive schema migrations to an already-created undo_log.
+
+    Idempotent and best-effort: a store that cannot be migrated still records
+    and lists tokens, which matters more than any single column.
+    """
+    try:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(undo_log)")}
+    except sqlite3.Error:
+        return
+    for column, statement in _MIGRATIONS:
+        if column in existing:
+            continue
+        try:
+            conn.execute(statement)
+        except sqlite3.Error:
+            _log.warning("undo schema migration for '%s' failed", column, exc_info=True)
 
 
 def _safe_json(obj: Any) -> str:

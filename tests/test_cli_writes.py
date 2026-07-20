@@ -56,15 +56,46 @@ def _audit_tools(db_path) -> list[str]:
 
 
 @pytest.mark.unit
-def test_cli_rules_toggle_dry_run_makes_no_call_and_no_audit(gov_home, fw_conn):
+def test_cli_rules_toggle_dry_run_reads_and_audits_but_never_mutates(gov_home, fw_conn):
+    """The invariant: a dry_run MAY read; it must never write.
+
+    It reads the rule (that is the only way it can report managementImpact) and
+    lands an audit row like every other governed call — the MCP dry-run always
+    did; the CLI silently skipping the audit was the outlier. What it must never
+    do is issue the mutating POST/PATCH.
+    """
     from firewall_aiops.cli import app
 
     result = CliRunner().invoke(app, ["rules", "toggle", "r1", "--disable", "--dry-run"])
-    assert result.exit_code == 0
-    assert "DRY-RUN" in result.output
-    fw_conn.post.assert_not_called()
+
+    assert result.exit_code == 0, result.output
+    assert "DRY-RUN" in result.output, "the human-readable banner must survive"
+    fw_conn.post.assert_not_called(), "the one thing a dry-run may never do"
     fw_conn.patch.assert_not_called()
-    assert not (gov_home / "audit.db").exists()
+    assert _audit_tools(gov_home / "audit.db") == ["toggle_rule"]
+
+
+@pytest.mark.unit
+def test_cli_rules_toggle_dry_run_shows_the_management_warning(gov_home, fw_conn, monkeypatch):
+    """The preview must surface the same lockout warning the real call reports,
+    rendered into the banner rather than dumped as JSON."""
+    from firewall_aiops.cli import app
+    from firewall_aiops.ops import rules as rule_ops
+
+    fw_conn.target.host = "192.168.1.1"
+    fw_conn.target.port = 443
+    monkeypatch.setattr(rule_ops, "rule_detail", lambda c, u: {
+        "uuid": u, "action": "pass", "enabled": True, "interface": "lan",
+        "destination": "192.168.1.1", "destinationPort": "443", "description": "mgmt",
+    })
+
+    result = CliRunner().invoke(app, ["rules", "toggle", "r1", "--disable", "--dry-run"])
+
+    assert result.exit_code == 0, result.output
+    assert "Management impact" in result.output
+    assert "192.168.1.1:443" in result.output
+    assert "{" not in result.output, "rendered, not raw JSON"
+    fw_conn.post.assert_not_called()
 
 
 @pytest.mark.unit

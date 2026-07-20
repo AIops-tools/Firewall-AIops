@@ -57,3 +57,27 @@ def rule_states(top: int = 50, target: Optional[str] = None) -> dict:
         target: Firewall target name from config; omit for the default.
     """
     return ops.rule_states(_get_connection(target), top)
+
+
+@mcp.tool()
+@governed_tool(risk_level="low")
+@tool_errors("dict")
+def pending_changes(target: Optional[str] = None) -> dict:
+    """[READ] The staged rule set apply_changes would commit, with lockout risk.
+
+    Run this BEFORE apply_changes. It reports whether committing the staged rules
+    would cut the endpoint this tool manages the firewall through — a disabled
+    'pass' rule that permits management access, or an enabled 'block' rule that
+    covers it. Findings are ranked worst-first and carry a `certain` flag:
+    certain ones make apply_changes refuse, uncertain ones (alias destinations,
+    'any', interface groups) are warnings only and never block.
+
+    `basis` states what this is: the staged rule STATE, not a diff against the
+    running config — neither platform exposes a per-rule dirty flag over REST.
+
+    Args:
+        target: Firewall target name from config; omit for the default.
+    """
+    from firewall_aiops.ops import pending as pending_ops
+
+    return pending_ops.pending_changes(_get_connection(target))

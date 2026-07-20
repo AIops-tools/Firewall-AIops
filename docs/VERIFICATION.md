@@ -11,7 +11,7 @@ a subjective "seems fine".
 
 ## What the mock suite already guarantees
 
-- Every module imports; the CLI builds; **all 34 MCP tools** carry the
+- Every module imports; the CLI builds; **all 35 MCP tools** carry the
   `@governed_tool` harness marker (`tests/test_smoke.py`, which also asserts the tool
   count and that `__version__` matches `pyproject.toml`).
 - The three flagship analyses (`gateway_health_rca`, `rule_hit_and_shadow_analysis`,
@@ -26,9 +26,21 @@ a subjective "seems fine".
 - Governance persistence is tested against a real on-disk SQLite audit DB: calls land
   as rows, failures are recorded `status=error` and record no undo, and the
   secure-by-default approver gate refuses high-risk ops with no `rules.yaml`.
+- The **self-lockout guards** are unit-tested for exactness AND fail-open
+  (`tests/test_lockout_guards.py`): `restart_service` refuses each platform's
+  API-serving daemon and its aliases while ordinary services still restart;
+  `apply_changes` / `reconfigure filter` refuse a staged rule that literally
+  matches the management host+port, warn-and-proceed on alias / `any` /
+  interface-group destinations, and treat an unreadable rule set as UNKNOWN
+  rather than clean.
 
 What it does **not** guarantee: that the concrete REST paths, field names, and
-staged-vs-applied config semantics match a real OPNsense or pfSense build. Those paths
+staged-vs-applied config semantics match a real OPNsense or pfSense build. In
+particular, `pending_changes` reads the *staged rule state* from each platform's
+rules API rather than a per-rule dirty flag (neither platform exposes one over
+REST) — a live run must confirm that an edit staged in the web GUI really does
+show up there before `apply_changes` commits it. The lockout guard is only as
+good as that read. Those paths
 are modelled from each project's public API documentation and are the **largest
 verification debt in this repo**.
 
@@ -110,8 +122,24 @@ silently pass.
 - [ ] MCP `apply_changes` → the staged change becomes live and the banner clears.
 - [ ] Confirm `apply_changes` behaves the same on **both** platforms (pfSense's
       apply semantics differ from OPNsense's — this is a likely divergence point).
+- [ ] `pending_changes` reflects an edit staged **in the web GUI** (not by this
+      tool). If it does not, the `apply_changes` lockout guard is blind to exactly
+      the edits it most needs to see — that would be a real finding.
 
-### 6. Governance actually gates
+### 6. Self-lockout guards (needs console access — do not skip the console part)
+- [ ] `restart_service(service="nginx")` on OPNsense (`lighttpd` on pfSense) is
+      **refused** with the teaching message, and the appliance stays up.
+- [ ] `restart_service(service="unbound")` still works — the guard is exact, and
+      over-blocking would be its own failure.
+- [ ] Stage a rule that blocks the management address/port, then `apply_changes`
+      → **refused**, and the firewall's UI still shows the change unapplied.
+- [ ] Same rule, `override=True`, run **from the console** → it applies and you
+      do lose API access. Restore from the console. This proves the guard was
+      protecting something real, not shadow-boxing.
+- [ ] Stage a rule whose destination is an **alias** covering the management host
+      → `apply_changes` proceeds with an `ALIAS_DESTINATION` warning (fail-open).
+
+### 7. Governance actually gates
 - [ ] With no `~/.firewall-aiops/rules.yaml`, `apply_changes` / `reconfigure` /
       `reboot` are **refused** unless `FIREWALL_AUDIT_APPROVED_BY` is set
       (secure-by-default); with it set plus `FIREWALL_AUDIT_RATIONALE`, the approver
@@ -120,7 +148,7 @@ silently pass.
       than hammering the firewall's API.
 - [ ] A failed call (wrong uuid) is audited with `status=error` and records **no** undo.
 
-### 7. Cleanup
+### 8. Cleanup
 - [ ] Re-enable every rule you disabled, remove every alias entry you added, and
       `apply_changes` once more.
 - [ ] `firewall-aiops overview` matches the baseline you captured before starting.

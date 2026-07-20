@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.AIops-tools/firewall-aiops",
   "title": "Firewall AIops",
-  "description": "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 34 tools.",
+  "description": "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 35 tools.",
   "repository": {
     "url": "https://github.com/AIops-tools/Firewall-AIops",
     "source": "github"
   },
-  "version": "0.4.0",
+  "version": "0.5.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "firewall-aiops",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "transport": {
         "type": "stdio"
       }

@@ -4,12 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "firewall-aiops"
-version = "0.4.0"
+version = "0.5.0"
 description = "Governed AI-ops for OPNsense + pfSense firewalls: rules, NAT, aliases, VPN, DHCP, diagnostics, flagship RCA analyses, and governed writes (rule toggle, alias entries, apply/reconfigure/reboot) with a built-in governance harness (audit, budget, undo, risk tiers)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
-authors = [{ name = "wei", email = "zhouwei008@gmail.com" }]
+authors = [{ name = "Wei Zhou", email = "zhouwei008@gmail.com" }]
 dependencies = [
     "httpx>=0.27,<1.0",
     "typer>=0.12,<1.0",

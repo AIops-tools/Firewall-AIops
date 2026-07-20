@@ -31,18 +31,27 @@ def sanitize(text: str | None, max_len: int = 500) -> str:
     payload past the cut-off by padding with junk control characters.
     ``None`` sanitizes to ``""``.
 
+    A truncated result ends in an ellipsis (U+2026) so the cut is visible. This
+    line already treats a silent cut as a defect for lists — a capped page that
+    looks complete gets reported as the whole set — and a capped string is the
+    same failure at a smaller scale: a shortened error message reads as the
+    whole explanation, and its remediation sentence, which comes last, is gone
+    without a trace.
+
     Args:
         text: Untrusted text from firewall API responses.
         max_len: Maximum length after truncation. Default 500.
 
     Returns:
-        Cleaned, truncated string safe for LLM consumption.
+        Cleaned string, ellipsis-terminated when it had to be cut.
     """
     if text is None:
         return ""
     stripped = _CONTROL_CHAR_RE.sub("", str(text))
     cleaned = "".join(c for c in stripped if unicodedata.category(c) != "Cf")
-    return cleaned[:max_len]
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[: max(0, max_len - 1)] + "\u2026"
 
 
 def opt_str(value: object | None, max_len: int = 500) -> str | None:

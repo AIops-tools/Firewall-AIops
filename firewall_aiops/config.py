@@ -82,12 +82,26 @@ class TargetConfig:
     port: int = 0
     username: str = ""
     verify_ssl: bool = True
+    scheme: str = "https"
+    """Transport scheme — ``https`` (default) or ``http``.
+
+    Defaults to ``https``, so nothing changes for an existing config. It exists
+    because a firewall's management GUI is often published on plain HTTP behind
+    a reverse proxy that terminates TLS, and the URL was previously hardcoded to
+    ``https://`` with no way to override it — which made such an instance simply
+    unreachable, with a TLS record-layer error as the only clue.
+    """
 
     def __post_init__(self) -> None:
         if self.platform not in PLATFORMS:
             raise ValueError(
                 f"Target '{self.name}': platform must be one of {PLATFORMS}, "
                 f"got '{self.platform}'."
+            )
+        if self.scheme not in ("https", "http"):
+            raise ValueError(
+                f"Target '{self.name}': scheme must be 'https' or 'http', "
+                f"got '{self.scheme}'."
             )
         if not self.port:
             object.__setattr__(self, "port", self.platform_obj.default_port)
@@ -102,7 +116,7 @@ class TargetConfig:
 
     @property
     def base_url(self) -> str:
-        return f"https://{self.host}:{self.port}"
+        return f"{self.scheme}://{self.host}:{self.port}"
 
 
 @dataclass(frozen=True)
@@ -146,6 +160,7 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             port=t.get("port", 0),
             username=t.get("username", ""),
             verify_ssl=t.get("verify_ssl", True),
+            scheme=t.get("scheme", "https"),
         )
         for t in raw.get("targets", [])
     )

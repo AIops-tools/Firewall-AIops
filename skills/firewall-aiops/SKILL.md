@@ -2,7 +2,7 @@
 name: firewall-aiops
 slug: firewall-aiops
 displayName: "Firewall AIops"
-summary: "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 34 tools."
+summary: "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 35 tools."
 license: MIT
 homepage: https://github.com/AIops-tools/Firewall-AIops
 tags: [aiops, mcp, governance, firewall]
@@ -22,7 +22,7 @@ compatibility: >
   Standalone, self-governed firewall operations across OPNsense (REST API /api/..., API key+secret via HTTP Basic auth) and pfSense (REST API v2 /api/v2/..., API key via X-API-Key header). Each target in the config names its own platform, and a name-keyed platform registry selects the API shape, so the same tools work on both and one config can span a mixed estate. The governance harness (audit, policy, token/runaway budget, undo, risk-tiers) is bundled in the package — no external skill-family dependency.
   All write operations are audited to a local SQLite DB under ~/.firewall-aiops/ (relocatable via FIREWALL_AIOPS_HOME).
   Credentials: the OPNsense API secret (paired with the API key) or the pfSense API key is stored ENCRYPTED in ~/.firewall-aiops/secrets.enc (Fernet/AES-128 + scrypt-derived key) — never plaintext on disk. Run 'firewall-aiops init' to onboard (it asks for the platform), or 'firewall-aiops secret set <target>' to add one. The store is unlocked by a master password from FIREWALL_AIOPS_MASTER_PASSWORD (non-interactive/MCP/CI) or an interactive prompt (CLI on a TTY). A legacy plaintext env var FIREWALL_<TARGET_NAME_UPPER>_SECRET is still honoured as a fallback with a deprecation warning (migrate with 'firewall-aiops secret migrate'). The secret is presented as HTTP Basic auth (OPNsense) or an X-API-Key header (pfSense) at request time and held only in memory; secrets are never logged or echoed.
-  State-changing operations pass through the @governed_tool decorator (pre-check + budget guard + audit + risk-tier gate). The high-risk commits (apply_changes, reconfigure) and reboot are risk=high with dry_run + an approver gate; reboot is irreversible. Reversible writes (toggle_rule, add_alias_entry, remove_alias_entry) capture the real fetched before-state and record an inverse undo descriptor.
+  State-changing operations pass through the @governed_tool decorator (pre-check + budget guard + audit + risk-tier gate). The high-risk commits (apply_changes, reconfigure) and reboot are risk=high with dry_run + an approver gate; reboot is irreversible. Reversible writes (toggle_rule, add_alias_entry, remove_alias_entry) capture the real fetched before-state and record an inverse undo descriptor. Three writes additionally refuse to destroy the tool's own management path: restart_service refuses the daemon serving this appliance's API, and apply_changes / reconfigure refuse a staged rule set that would provably cut management access.
   Webhooks: none — no outbound network calls beyond the configured OPNsense / pfSense REST API.
   SSL: verify_ssl defaults to false-friendly for self-signed lab certs; enable for production.
   Transitive dependencies: httpx (HTTP client) and the MCP SDK. No post-install scripts or background services.
@@ -32,7 +32,7 @@ compatibility: >
 
 > **Disclaimer**: Community-maintained open-source project, **not affiliated with, endorsed by, or sponsored by the OPNsense project, Deciso, Netgate, or the pfSense project.** OPNsense, pfSense and Netgate are trademarks of their respective owners. Source at [github.com/AIops-tools/Firewall-AIops](https://github.com/AIops-tools/Firewall-AIops) under the MIT license.
 
-Governed firewall operations — **34 MCP tools** across **OPNsense** (REST `/api/...`)
+Governed firewall operations — **35 MCP tools** across **OPNsense** (REST `/api/...`)
 and **pfSense** (REST v2 `/api/v2/...`), every one wrapped with the bundled
 `@governed_tool` harness: a local unified audit log under `~/.firewall-aiops/`,
 policy engine, token/runaway budget guard, undo-token recording, and
@@ -51,7 +51,7 @@ OPNsense API secret / pfSense API key is stored **encrypted**
 | Group | Tools | Count | R/W |
 |-------|-------|:-----:|:---:|
 | **System** | firmware_status, health_status, interface_status, gateway_status | 4 | read |
-| **Rules** | list_rules, rule_detail, rule_stats, rule_states | 4 | read |
+| **Rules** | list_rules, rule_detail, rule_stats, rule_states, pending_changes | 5 | read |
 | **NAT** | nat_port_forwards, nat_outbound, nat_one_to_one | 3 | read |
 | **Aliases** | list_aliases, alias_entries | 2 | read |
 | **VPN** | wireguard_status, openvpn_sessions, ipsec_sas | 3 | read |
@@ -138,9 +138,14 @@ MCP tools (start the server with `firewall-aiops mcp`). Recipes below say which 
    changes nothing.
 5. `firewall-aiops rules toggle <uuid> --disable` → double-confirm; the write fetches the
    rule's real prior enabled flag and records an inverse undo descriptor with an `_undo_id`.
-6. MCP `apply_changes` to commit the staged config — **risk=high**, so set
-   `FIREWALL_AUDIT_APPROVED_BY` and `FIREWALL_AUDIT_RATIONALE` first.
-7. **Failure branch**: if traffic breaks after the commit, `firewall-aiops undo apply <id>`
+6. MCP `pending_changes` → read what the commit would actually make live, including
+   whether any staged rule covers the endpoint this tool manages the firewall through.
+   `toggle_rule` already reported `managementImpact` in step 5 if so.
+7. MCP `apply_changes` to commit the staged config — **risk=high**, so set
+   `FIREWALL_AUDIT_APPROVED_BY` and `FIREWALL_AUDIT_RATIONALE` first. It refuses
+   outright if a staged rule would provably cut management access; pass
+   `override=True` only with console access in hand.
+8. **Failure branch**: if traffic breaks after the commit, `firewall-aiops undo apply <id>`
    restores the rule's prior enabled state, then `apply_changes` again to make the
    restoration live. The toggle is staged until applied — before step 6 you can simply
    toggle it back with no commit at all.

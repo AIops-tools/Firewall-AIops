@@ -46,6 +46,7 @@ targets:
     host: 192.0.2.2
     port: 443
     verify_ssl: false
+    scheme: http          # https (default) | http, for a GUI behind a TLS-terminating proxy
 ```
 
 ## 4. Master password (for non-interactive / MCP use)
@@ -79,6 +80,8 @@ query on both platforms.
 - The secret is presented as HTTP Basic auth (OPNsense) or an `X-API-Key` header
   (pfSense) at request time and held only in memory; secrets are never logged or echoed.
 - `verify_ssl` defaults to true; set `false` only for self-signed lab certificates.
+- `scheme` defaults to `https`; set `http` only when the GUI is published over plain
+  HTTP behind a proxy that terminates TLS for it.
 - Every MCP tool is audited to `~/.firewall-aiops/audit.db` (relocatable via
   `FIREWALL_AIOPS_HOME`). High-risk writes (`apply_changes`, `reconfigure`, `reboot`)
   require an approver (`FIREWALL_AUDIT_APPROVED_BY` + `FIREWALL_AUDIT_RATIONALE`).

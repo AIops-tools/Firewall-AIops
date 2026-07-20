@@ -55,6 +55,8 @@ reversible ones capture before-state and record an undo token.
 
 ### SSL/TLS Verification
 `verify_ssl` defaults to true; disable only for self-signed lab certificates.
+`scheme` defaults to `https`; set it to `http` only when the firewall GUI is
+published over plain HTTP behind a proxy that terminates TLS for it.
 
 ### Prompt-Injection Protection
 All firewall-returned text (rule descriptions, alias entries, log lines, VPN peer

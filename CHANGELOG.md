@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.0 — 2026-07-20
+
+### Fixed
+- **`restart_service` refuses the service that serves the API**, and `apply_changes` / `reconfigure filter` refuse a staged change that would block management access to the configured host and port.
+- **New `pending_changes` read, and the apply dry-run now shows the staged set.** `apply_changes` was a blind commit: its preview named only the platform, and nothing in the package could read what was pending — including edits staged outside the tool..
+- **New `scheme:`** (default `https`).
+- Harness: a write whose response is lost is audited `status=unknown`, not `error` — it may have taken effect. Undo tokens gain `effectVerified` (undo.db migrated in place).
+- Harness: a dry-run no longer records an undo token, and no longer requires a named approver. Guards now run on the preview path.
+- Truncated strings end in an ellipsis instead of being cut silently; error messages are capped at 800 chars, not 300.
+
+See RELEASE_NOTES.md for the full detail.
+
 ## v0.3.0 — 2026-07-17
 
 ### Added
