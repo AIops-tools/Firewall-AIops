@@ -82,9 +82,9 @@ tool name resolves to the right path on each firewall via the platform registry.
 | `remove_alias_entry` | **med** | OPNsense `alias_util/delete/{name}`; pfSense `firewall/alias` | captures prior entries; undo adds it back |
 | `kill_states` | **med** | `diagnostics/…/killStates` / `diagnostics/states` | flush pf states (optionally one source IP) |
 | `restart_service` | **med** | `service/restart/{service}` | restart a firewall service; **refuses** the daemon serving this appliance's own API |
-| `apply_changes` | **HIGH** | `filter/apply` / `firewall/apply` | commit staged config — makes edits live; `dry_run` returns the staged set; **refuses** a provable lockout (`override=True` to force); approver required |
-| `reconfigure` | **HIGH** | `filter/savepoint` / `firewall/apply` | reload/commit a subsystem; `dry_run` + approver |
-| `reboot` | **HIGH** | `core/system/reboot` / `diagnostics/reboot` | IRREVERSIBLE — audit only, no undo; `dry_run` + approver |
+| `apply_changes` | **HIGH** | `filter/apply` / `firewall/apply` | commit staged config — makes edits live; `dry_run` returns the staged set; **refuses** a provable lockout (`override=True` to force); audited |
+| `reconfigure` | **HIGH** | `filter/savepoint` / `firewall/apply` | reload/commit a subsystem; `dry_run` + audited |
+| `reboot` | **HIGH** | `core/system/reboot` / `diagnostics/reboot` | IRREVERSIBLE — audit only, no undo; `dry_run` |
 
 ## Out of scope (v0.1)
 

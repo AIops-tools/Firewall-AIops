@@ -18,7 +18,7 @@ from firewall_aiops.cli._common import (
     cli_errors,
     console,
     double_confirm,
-    dry_run_print,
+    dry_run_preview,
 )
 
 undo_app = typer.Typer(
@@ -51,11 +51,22 @@ def undo_apply_cmd(
     from mcp_server.tools import undo as gov
 
     if dry_run:
+        # An unknown id, an already-applied token and an unregistered inverse
+        # tool all come back as {"error": ...}. Rendering those through
+        # dry_run_preview stops the CLI reporting "would apply inverse: ?" with
+        # a green banner and exit 0 for an undo that cannot be applied at all.
         preview = gov.undo_apply(undo_id=undo_id, dry_run=True, target=target)
-        dry_run_print(
+        would = preview.get("wouldApply", {}) if isinstance(preview, dict) else {}
+        dry_run_preview(
+            preview,
             operation="undo_apply",
-            api_call=f"inverse: {preview.get('wouldApply', {}).get('tool', '?')}",
-            parameters=preview.get("wouldApply", {}).get("params", {}),
+            api_call=f"inverse: {would.get('tool', '?')}",
+            parameters={
+                **would.get("params", {}),
+                # False means the original write lost its response: the change
+                # this inverse reverses is probable, not confirmed.
+                "effectVerified": preview.get("effectVerified"),
+            },
         )
         return
     double_confirm("apply undo", undo_id)

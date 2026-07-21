@@ -13,7 +13,7 @@ from firewall_aiops.cli._common import (
     cli_errors,
     console,
     double_confirm,
-    dry_run_print,
+    dry_run_preview,
     get_connection,
 )
 
@@ -29,7 +29,9 @@ def _require_ok(result: dict) -> dict:
 
     The governed twins are wrapped in ``@tool_errors``, which turns a refusal
     into an error dict rather than an exception — without this the CLI would
-    print a DRY-RUN banner over a refusal.
+    print the refusal and still exit 0, telling a CI job or a shell ``&&`` chain
+    that a blocked write landed. The preview path gets the same treatment from
+    ``dry_run_preview``, which additionally suppresses the banner.
     """
     if isinstance(result, dict) and result.get("error"):
         console.print(f"[red]Error: {result['error']}[/]")
@@ -93,9 +95,8 @@ def rules_toggle(
         # Through the GOVERNED twin: the preview then reports the same
         # management-plane impact AND lands the same audit row as the real call.
         preview = gov.toggle_rule(uuid=uuid, enable=enable, target=target, dry_run=True)
-        _require_ok(preview)
-        dry_run_print(operation="toggle_rule", api_call=f"{verb} rule",
-                      parameters={"uuid": uuid, "enable": enable})
+        dry_run_preview(preview, operation="toggle_rule", api_call=f"{verb} rule",
+                        parameters={"uuid": uuid, "enable": enable})
         _print_management_impact(preview.get("managementImpact"))
         return
     double_confirm(f"{verb} rule", uuid)

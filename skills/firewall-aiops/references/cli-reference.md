@@ -47,5 +47,6 @@ firewall-aiops log --action block --limit 50   # only blocked traffic
   aliases, VPN, DHCP, diagnostics), the three flagship analyses, and the remaining
   governed writes (alias entry add/remove, kill_states, restart_service, apply_changes,
   reconfigure, reboot) are exposed through the MCP server (`firewall-aiops mcp`).
-- High-risk writes (`apply_changes`, `reconfigure`, `reboot`) require an approver: set
-  `FIREWALL_AUDIT_APPROVED_BY` (and `FIREWALL_AUDIT_RATIONALE`).
+- High-risk writes (`apply_changes`, `reconfigure`, `reboot`) are labelled risk=high
+  and audited. `FIREWALL_AUDIT_APPROVED_BY` (and `FIREWALL_AUDIT_RATIONALE`) are
+  optional audit annotations, recorded when set but never required.

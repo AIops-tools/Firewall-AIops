@@ -84,6 +84,8 @@ query on both platforms.
   HTTP behind a proxy that terminates TLS for it.
 - Every MCP tool is audited to `~/.firewall-aiops/audit.db` (relocatable via
   `FIREWALL_AIOPS_HOME`). High-risk writes (`apply_changes`, `reconfigure`, `reboot`)
-  require an approver (`FIREWALL_AUDIT_APPROVED_BY` + `FIREWALL_AUDIT_RATIONALE`).
+  are labelled risk=high and audited; `FIREWALL_AUDIT_APPROVED_BY` +
+  `FIREWALL_AUDIT_RATIONALE` are optional audit annotations, recorded when set but
+  never required.
 - No webhooks, no telemetry, no outbound calls beyond the configured OPNsense / pfSense
   REST API. No post-install scripts or background services.

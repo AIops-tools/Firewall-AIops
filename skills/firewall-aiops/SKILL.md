@@ -22,7 +22,7 @@ compatibility: >
   Standalone, self-governed firewall operations across OPNsense (REST API /api/..., API key+secret via HTTP Basic auth) and pfSense (REST API v2 /api/v2/..., API key via X-API-Key header). Each target in the config names its own platform, and a name-keyed platform registry selects the API shape, so the same tools work on both and one config can span a mixed estate. The governance harness (audit, policy, token/runaway budget, undo, risk-tiers) is bundled in the package — no external skill-family dependency.
   All write operations are audited to a local SQLite DB under ~/.firewall-aiops/ (relocatable via FIREWALL_AIOPS_HOME).
   Credentials: the OPNsense API secret (paired with the API key) or the pfSense API key is stored ENCRYPTED in ~/.firewall-aiops/secrets.enc (Fernet/AES-128 + scrypt-derived key) — never plaintext on disk. Run 'firewall-aiops init' to onboard (it asks for the platform), or 'firewall-aiops secret set <target>' to add one. The store is unlocked by a master password from FIREWALL_AIOPS_MASTER_PASSWORD (non-interactive/MCP/CI) or an interactive prompt (CLI on a TTY). A legacy plaintext env var FIREWALL_<TARGET_NAME_UPPER>_SECRET is still honoured as a fallback with a deprecation warning (migrate with 'firewall-aiops secret migrate'). The secret is presented as HTTP Basic auth (OPNsense) or an X-API-Key header (pfSense) at request time and held only in memory; secrets are never logged or echoed.
-  State-changing operations pass through the @governed_tool decorator (pre-check + budget guard + audit + risk-tier gate). The high-risk commits (apply_changes, reconfigure) and reboot are risk=high with dry_run + an approver gate; reboot is irreversible. Reversible writes (toggle_rule, add_alias_entry, remove_alias_entry) capture the real fetched before-state and record an inverse undo descriptor. Three writes additionally refuse to destroy the tool's own management path: restart_service refuses the daemon serving this appliance's API, and apply_changes / reconfigure refuse a staged rule set that would provably cut management access.
+  State-changing operations pass through the @governed_tool decorator (budget guard + audit + a descriptive risk-tier label, not a gate). The high-risk commits (apply_changes, reconfigure) and reboot are risk=high with dry_run; reboot is irreversible. Reversible writes (toggle_rule, add_alias_entry, remove_alias_entry) capture the real fetched before-state and record an inverse undo descriptor. Three writes additionally refuse to destroy the tool's own management path: restart_service refuses the daemon serving this appliance's API, and apply_changes / reconfigure refuse a staged rule set that would provably cut management access.
   Webhooks: none — no outbound network calls beyond the configured OPNsense / pfSense REST API.
   SSL: verify_ssl defaults to false-friendly for self-signed lab certs; enable for production.
   Transitive dependencies: httpx (HTTP client) and the MCP SDK. No post-install scripts or background services.
@@ -36,7 +36,7 @@ Governed firewall operations — **35 MCP tools** across **OPNsense** (REST `/ap
 and **pfSense** (REST v2 `/api/v2/...`), every one wrapped with the bundled
 `@governed_tool` harness: a local unified audit log under `~/.firewall-aiops/`,
 policy engine, token/runaway budget guard, undo-token recording, and
-graduated-autonomy risk tiers. A per-target `platform` field selects the API shape,
+descriptive risk-tier labelling. A per-target `platform` field selects the API shape,
 so the same tools work on both firewalls and one config can span a mixed estate. The
 OPNsense API secret / pfSense API key is stored **encrypted**
 (`~/.firewall-aiops/secrets.enc`, Fernet + scrypt) — never plaintext on disk.
@@ -87,7 +87,7 @@ firewall-aiops doctor
 - Inspect NAT, aliases, VPN tunnels (WireGuard/OpenVPN/IPsec), and DHCP leases
 - Safely toggle a rule or edit an alias (`toggle_rule` / `add_alias_entry` /
   `remove_alias_entry`, reversible + undo-recorded), then **make it live** with
-  `apply_changes` (dry-run + approver)
+  `apply_changes` (dry-run + audit)
 
 **Do NOT use when** the target is not an OPNsense/pfSense firewall — route hypervisor,
 storage, backup, cluster, multi-vendor router/switch config, or OT/industrial work to
@@ -162,7 +162,7 @@ MCP tools (start the server with `firewall-aiops mcp`). Recipes below say which 
    what is already in it.
 5. MCP `add_alias_entry(alias=<blocklist>, entry=<src-ip>)` → medium risk, reversible,
    undo descriptor recorded from the fetched before-state.
-6. MCP `apply_changes` (high risk, approver required) to make the alias live, then
+6. MCP `apply_changes` (high risk, audited) to make the alias live, then
    `kill_states(source=<src-ip>)` to tear down any states the attacker already holds.
 7. **Failure branch**: if you blocked too wide a range and locked out legitimate traffic,
    MCP `remove_alias_entry` (or `firewall-aiops undo apply <id>`) and `apply_changes`
@@ -186,17 +186,20 @@ MCP tools (start the server with `firewall-aiops mcp`). Recipes below say which 
    cannot be reversed this way — they are audit-only, which is why every reversible edit
    goes in *before* the commit.
 
-> **Secure by default (v0.2.0+)**: with no `~/.firewall-aiops/rules.yaml`, high/critical
-> operations are denied unless `FIREWALL_AUDIT_APPROVED_BY` names an approver (set
-> `FIREWALL_AUDIT_RATIONALE` too). `firewall-aiops init` seeds a starter rules.yaml; an
-> operator-authored rules file is honoured as-is.
+> **Authorization is not this skill's job**: there is no read-only switch, policy
+> file, or approval gate. Whether a write runs is the agent's judgement or the
+> connecting account's permissions — point the tool at an API user without write
+> scope and writes fail at the server. Every call is still audited.
+> `FIREWALL_AUDIT_APPROVED_BY` / `FIREWALL_AUDIT_RATIONALE` are optional audit
+> annotations, recorded when set but never required.
 
 ## Governance & Safety
 
 - Every tool is audited to `~/.firewall-aiops/audit.db` (relocatable via
   `FIREWALL_AIOPS_HOME`).
-- High-risk ops (`apply_changes`, `reconfigure`, `reboot`) can require a named
-  approver: set `FIREWALL_AUDIT_APPROVED_BY` and `FIREWALL_AUDIT_RATIONALE`.
+- High-risk ops (`apply_changes`, `reconfigure`, `reboot`) are labelled risk=high
+  and audited; `FIREWALL_AUDIT_APPROVED_BY` / `FIREWALL_AUDIT_RATIONALE` are
+  optional audit annotations, recorded when set but never required.
 - Writes support `--dry-run` and double confirmation at the CLI. `reboot` is
   irreversible (audit only).
 - Reversible writes capture the real fetched before-state and record an inverse

@@ -99,6 +99,36 @@ def test_cli_rules_toggle_dry_run_shows_the_management_warning(gov_home, fw_conn
 
 
 @pytest.mark.unit
+def test_cli_rules_toggle_dry_run_refusal_suppresses_the_banner_and_exits_nonzero(
+    gov_home, fw_conn, monkeypatch
+):
+    """When the governed twin refuses, the preview must refuse with it.
+
+    Any failure inside the twin — here the rule read the preview depends on —
+    reaches the CLI as ``{"error": ...}`` rather than an exception, because
+    ``@tool_errors`` flattens it. Printing the DRY-RUN banner over that would
+    tell the operator a write is ready to go when the real call is about to
+    fail, and exit 0 would tell a ``&&`` chain the same thing.
+    """
+    from firewall_aiops.cli import app
+    from firewall_aiops.connection import FirewallApiError
+    from firewall_aiops.ops import rules as rule_ops
+
+    def _boom(conn, uuid):
+        raise FirewallApiError("rule 'r1' not found on this appliance")
+
+    monkeypatch.setattr(rule_ops, "rule_detail", _boom)
+
+    result = CliRunner().invoke(app, ["rules", "toggle", "r1", "--disable", "--dry-run"])
+
+    assert result.exit_code == 1, result.output
+    assert "DRY-RUN" not in result.output
+    assert "not found on this appliance" in result.output
+    fw_conn.post.assert_not_called()
+    fw_conn.patch.assert_not_called()
+
+
+@pytest.mark.unit
 def test_cli_rules_toggle_confirmed_goes_through_governance(gov_home, fw_conn):
     """Confirmed CLI write must execute via the governed twin: the API call
     fires AND an audit row lands in audit.db (this is what the reroute fix

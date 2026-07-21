@@ -9,9 +9,10 @@ is fetched via a real GET, never guessed):
   * ``add_alias_entry`` / ``remove_alias_entry`` — read the alias' current member
     entries, then add/remove one; undo restores.
 
-The "make it live" writes commit staged config and are the graduated-autonomy
-high-risk tier: ``apply_changes`` and ``reconfigure``. ``kill_states`` and
-``restart_service`` are medium; ``reboot`` is high and irreversible (audit only).
+The "make it live" writes commit staged config and are the high-risk tier:
+``apply_changes`` and ``reconfigure``. ``kill_states`` and ``restart_service``
+are medium; ``reboot`` is high and irreversible (audit only). The risk tier is a
+descriptive label carried into the audit row, not a gate.
 
 Three writes additionally refuse to destroy the tool's own management path
 (:class:`SelfLockout`), because a firewall is the one device where a routine

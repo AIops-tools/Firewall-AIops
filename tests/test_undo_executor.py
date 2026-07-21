@@ -121,8 +121,40 @@ def test_cli_undo_apply_dry_run_renders(gov_home):
     result = CliRunner().invoke(app, ["undo", "apply", uid, "--dry-run"])
     assert result.exit_code == 0, result.output
     assert "DRY-RUN" in result.output
+    # effectVerified rides in the banner: False would mean the original write
+    # lost its response, so the change being reversed is probable, not confirmed.
+    assert "effectVerified = True" in result.output
     assert _CALLS == []
     assert undo_mod.get_undo_store().get(uid)["status"] == "recorded"
+
+
+@pytest.mark.unit
+def test_cli_undo_apply_dry_run_of_an_unapplicable_token_is_refused(gov_home):
+    """A preview whose answer is "this cannot be applied" must refuse, not preview.
+
+    An unknown id, a spent token and an unregistered inverse all come back from
+    the governed twin as ``{"error": ...}``. The CLI used to read straight past
+    that into ``preview["wouldApply"]``, print ``inverse: ?`` under a green
+    DRY-RUN banner and exit 0 — telling the operator (and any ``&&`` chain) that
+    an inapplicable undo was ready to go.
+    """
+    from typer.testing import CliRunner
+
+    from firewall_aiops.cli import app
+
+    spent = _record()
+    gov.undo_apply(undo_id=spent)
+    unregistered = _record(undo_tool="no_such_tool_xyz")
+
+    for undo_id, expected in (
+        ("deadbeef", "Unknown undo id"),
+        (spent, "already 'applied'"),
+        (unregistered, "not registered"),
+    ):
+        result = CliRunner().invoke(app, ["undo", "apply", undo_id, "--dry-run"])
+        assert result.exit_code == 1, result.output
+        assert "DRY-RUN" not in result.output
+        assert expected in result.output
 
 
 @pytest.mark.unit

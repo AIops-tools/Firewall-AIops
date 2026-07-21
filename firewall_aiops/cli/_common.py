@@ -23,10 +23,18 @@ DryRunOption = Annotated[
 
 
 def _cli_error_types() -> tuple[type[BaseException], ...]:
-    """Exceptions translated to a one-line teaching error instead of a traceback."""
-    from firewall_aiops.connection import FirewallApiError
+    """Exceptions translated to a one-line teaching error instead of a traceback.
 
-    return (FirewallApiError, KeyError, OSError, ValueError)
+    ``PolicyDenied`` is kept here defensively even though it is not a ValueError:
+    the harness no longer raises it in normal operation — there is no read-only
+    switch or approval gate to refuse a call — but catching it means that if it
+    ever surfaces it renders as a one-line message rather than a bare traceback,
+    which would otherwise exit 1 printing NOTHING.
+    """
+    from firewall_aiops.connection import FirewallApiError
+    from firewall_aiops.governance import PolicyDenied
+
+    return (FirewallApiError, KeyError, OSError, ValueError, PolicyDenied)
 
 
 def cli_errors(fn: Callable) -> Callable:
@@ -66,6 +74,30 @@ def dry_run_print(*, operation: str, api_call: str, parameters: dict | None = No
     for k, v in (parameters or {}).items():
         console.print(f"[magenta]  Param:     {k} = {v}[/]")
     console.print("[magenta]  Run without --dry-run to execute.[/]\n")
+
+
+def dry_run_preview(
+    preview: Any, *, operation: str, api_call: str, parameters: dict | None = None
+) -> None:
+    """Render a GOVERNED dry-run result as the human-readable DRY-RUN banner.
+
+    ``preview`` must come from calling the governed tool with ``dry_run=True``,
+    so every guard it carries has already run against the real target — the
+    self-lockout checks in particular, which is the whole reason this firewall
+    tool previews at all. A refusal arrives as ``{"error": ...}``
+    (``tool_errors`` flattens the exception) and is printed like any other CLI
+    error, exiting non-zero exactly as the real write would. Printing a green
+    banner for a call that is about to be refused is the preview being wrong,
+    not merely incomplete: the operator reads the refusal that follows as a
+    transient failure and retries it.
+
+    On the allowed path the banner is what it always was — routing through the
+    governed call buys the guard and the audit row, not a new serialization.
+    """
+    if isinstance(preview, dict) and preview.get("error"):
+        console.print(f"[red]Error: {preview['error']}[/]")
+        raise typer.Exit(1)
+    dry_run_print(operation=operation, api_call=api_call, parameters=parameters)
 
 
 def double_confirm(action: str, resource: str) -> None:

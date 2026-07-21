@@ -1,9 +1,10 @@
 """Governed firewall-write MCP tools (the only state-changing tools).
 
-Every tool is wrapped with the governance harness (audit + graduated approval
-tier) and takes a ``dry_run`` preview. Reversible writes pass an ``undo=``
-callback that turns the fetched before-state into an inverse descriptor the
-harness records; irreversible ones (apply/reconfigure/reboot) record none.
+Every tool is wrapped with the governance harness (audit + a descriptive
+risk-tier label, not a gate) and takes a ``dry_run`` preview. Reversible writes
+pass an ``undo=`` callback that turns the fetched before-state into an inverse
+descriptor the harness records; irreversible ones (apply/reconfigure/reboot)
+record none.
 
 Risk tiers: apply_changes / reconfigure / reboot = high (commit staged config or
 irreversible); toggle_rule / add_alias_entry / remove_alias_entry / kill_states /
@@ -161,8 +162,6 @@ def apply_changes(
     """[WRITE][risk=high] Commit staged firewall config — makes edits live.
 
     This is the "make it live" step after staged edits (e.g. toggle_rule).
-    Requires an approver (FIREWALL_AUDIT_APPROVED_BY) under the graduated-autonomy
-    policy.
 
     Reads the staged rule set first and REFUSES when committing it would provably
     cut the endpoint this tool manages the firewall through — disabling the
@@ -201,9 +200,9 @@ def reconfigure(subsystem: str = "filter", dry_run: bool = False,
                 override: bool = False, target: Optional[str] = None) -> dict:
     """[WRITE][risk=high] Reload/commit a subsystem's config (filter/nat/aliases).
 
-    Requires an approver (FIREWALL_AUDIT_APPROVED_BY). Reloading the 'filter'
-    subsystem commits the staged rule set just as apply_changes does, so it
-    carries the same lockout guard and the same override.
+    Reloading the 'filter' subsystem commits the staged rule set just as
+    apply_changes does, so it carries the same lockout guard and the same
+    override.
 
     Args:
         subsystem: Config subsystem to reload (filter, nat, aliases).
@@ -287,8 +286,7 @@ def restart_service(service: str, dry_run: bool = False,
 def reboot(dry_run: bool = False, target: Optional[str] = None) -> dict:
     """[WRITE][risk=high] Reboot the firewall. IRREVERSIBLE — audit only, no undo.
 
-    Requires an approver (FIREWALL_AUDIT_APPROVED_BY) under the graduated-autonomy
-    policy. Pass dry_run=True to preview.
+    Pass dry_run=True to preview.
 
     Args:
         dry_run: If True, preview without rebooting.

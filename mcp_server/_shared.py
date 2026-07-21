@@ -114,7 +114,7 @@ mcp = FastMCP(
         "transparent heuristics that show their numbers. Governed writes — "
         "toggle_rule and add/remove alias entry (reversible, undo-recorded), "
         "kill_states and restart_service, plus apply_changes / reconfigure / "
-        "reboot at risk=high with a dry_run preview and an approver. Every tool "
+        "reboot at risk=high with a dry_run preview. Every tool "
         "runs through the firewall-aiops governance harness (audit / budget / "
         "risk-tier / undo). The same tools work on both firewalls: a per-target "
         "'platform' field selects the API shape."

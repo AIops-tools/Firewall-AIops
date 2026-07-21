@@ -14,8 +14,8 @@ config names its own `platform`; a name-keyed platform registry selects the API 
 (auth + resource paths), so an agent never has to know which firewall it is talking to.
 
 Every tool runs through a **built-in governance harness** (vendored, zero external
-dependency): audit log, token/call budget with runaway circuit-breaker, graduated
-risk-tier approval, undo-token recording, and prompt-injection sanitisation.
+dependency): audit log, token/call budget with runaway circuit-breaker, descriptive
+risk-tier labelling, undo-token recording, and prompt-injection sanitisation.
 
 ## Why this exists
 
@@ -32,42 +32,27 @@ risk-tier approval, undo-token recording, and prompt-injection sanitisation.
 - **Governed writes** — toggle a rule, add/remove an alias entry (reversible,
   undo-recorded from the fetched before-state), flush states, restart a service, and
   the "make it live" commit (`apply_changes` / `reconfigure`) and `reboot` at
-  **risk=high** with a dry-run preview and an approver gate.
+  **risk=high** with a dry-run preview. Every write, reversible or not, lands an
+  audit row.
 
-## Security: read-only mode
+## What this tool does, and does not, decide
 
-This tool is meant to be handed to an AI agent, so its safety story is enforced
-by the server rather than requested in a prompt:
+It delivers firewall operations — reads and writes — accurately and efficiently,
+and records every one of them. It does **not** decide whether a write is allowed
+to happen. That is the agent's judgement, or the permission of the account you
+connect it with: give the OPNsense/pfSense API user a read-only role, and the
+writes fail at the server — the place that actually owns the permission.
 
-```bash
-export FIREWALL_READ_ONLY=1
-```
+So there is no read-only switch, no policy file, no approval gate to configure.
+The one thing the tool guarantees is that nothing is silent: **every call, over
+MCP and over the CLI alike, lands an audit row** in `~/.firewall-aiops/audit.db`,
+and reversible writes still capture their before-state and record an inverse
+where one exists.
 
-With that set, the **9 write tools are never registered**. An MCP client
-lists **26 tools instead of 35** — the writes are not hidden, not
-gated behind a flag, and not merely refused when called. They are absent from
-the session. A model cannot invoke a tool it was never offered, and cannot be
-argued into one.
-
-That distinction is the whole point. A tool that exists but refuses still invites
-retry loops and "I'll describe the call instead" behaviour from smaller models,
-and it leaves a reviewer trusting a promise. An absent tool is a fact you can
-check: connect, list the tools, and see that the writes are not there.
-
-Enforcement is two layers deep, so the switch cannot be sidestepped by changing
-entry point:
-
-| Layer | What it does | Covers |
-|---|---|---|
-| `@governed_tool` harness | refuses every non-read operation outright | MCP, CLI, and in-process callers |
-| MCP registration | write tools are removed from `list_tools()` | anything speaking MCP |
-
-Read operations are unaffected, and every call is still audited to
-`~/.firewall-aiops/audit.db`.
-
-> The read/write split is derived from each tool's declared `risk_level`, and a
-> test asserts that this never disagrees with the `[READ]`/`[WRITE]` tag in the
-> tool's own documentation — so a write can't quietly present itself as a read.
+> Each tool declares a `risk_level`, matched to its `[READ]`/`[WRITE]`
+> documentation tag, and carried into the audit row as a descriptive tier — so a
+> reviewer can see at a glance that a row was a high-risk write. It is a label,
+> not a gate.
 
 Running a smaller / local model? See
 [agent-guardrails.md](skills/firewall-aiops/references/agent-guardrails.md) — it lists
@@ -92,8 +77,8 @@ restating them) and gives a ready-made system prompt for what's left.
 
 Reversible writes record an inverse **undo descriptor** built from the real fetched
 before-state (`toggle_rule` restores the rule's prior enabled flag; alias add/remove
-invert). `apply_changes` / `reconfigure` / `reboot` are high-risk with `dry_run` +
-an approver requirement; `reboot` is irreversible (audit only).
+invert). `apply_changes` / `reconfigure` / `reboot` are high-risk with `dry_run`;
+`reboot` is irreversible (audit only).
 
 ## Install
 
@@ -168,9 +153,11 @@ Every MCP tool is wrapped by `@governed_tool`:
   secrets redacted, status, duration, risk tier, approver, rationale).
 - **Budget / runaway guard** — per-process token/call caps and a repeat-call circuit
   breaker (`FIREWALL_MAX_TOOL_CALLS`, `FIREWALL_RUNAWAY_MAX`, …).
-- **Graduated risk tiers** — high-risk writes (`apply_changes`, `reconfigure`,
-  `reboot`) require an approver: set `FIREWALL_AUDIT_APPROVED_BY` (and
-  `FIREWALL_AUDIT_RATIONALE`) before they will run.
+- **Risk-tier labelling** — each tool's declared `risk_level` is recorded on its
+  audit row as a descriptive tier (a label, not a gate); there is no read-only
+  switch, policy file, or approval gate. `FIREWALL_AUDIT_APPROVED_BY` and
+  `FIREWALL_AUDIT_RATIONALE` are optional audit annotations, recorded when set but
+  never required.
 - **Undo recording** — reversible writes record an inverse descriptor to
   `~/.firewall-aiops/undo.db` from the fetched before-state (recording only; an
   external orchestrator executes it).

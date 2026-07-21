@@ -24,8 +24,9 @@ a subjective "seems fine".
   correct **inverse** undo descriptor, built from a fetched before-state rather than a
   guess, against a mocked connection.
 - Governance persistence is tested against a real on-disk SQLite audit DB: calls land
-  as rows, failures are recorded `status=error` and record no undo, and the
-  secure-by-default approver gate refuses high-risk ops with no `rules.yaml`.
+  as rows, failures are recorded `status=error` and record no undo, and a high-risk
+  write with no approver runs and is audited (the risk tier is a descriptive label,
+  not a gate).
 - The **self-lockout guards** are unit-tested for exactness AND fail-open
   (`tests/test_lockout_guards.py`): `restart_service` refuses each platform's
   API-serving daemon and its aliases while ordinary services still restart;
@@ -139,11 +140,13 @@ silently pass.
 - [ ] Stage a rule whose destination is an **alias** covering the management host
       → `apply_changes` proceeds with an `ALIAS_DESTINATION` warning (fail-open).
 
-### 7. Governance actually gates
-- [ ] With no `~/.firewall-aiops/rules.yaml`, `apply_changes` / `reconfigure` /
-      `reboot` are **refused** unless `FIREWALL_AUDIT_APPROVED_BY` is set
-      (secure-by-default); with it set plus `FIREWALL_AUDIT_RATIONALE`, the approver
-      and rationale appear in the audit row.
+### 7. Governance records (it does not gate)
+- [ ] `apply_changes` / `reconfigure` / `reboot` run without any approver set — the
+      tool does not authorize writes; the connecting account's permissions do. Each
+      lands an audit row with its risk tier recorded as a descriptive label.
+- [ ] With `FIREWALL_AUDIT_APPROVED_BY` and `FIREWALL_AUDIT_RATIONALE` set, the
+      approver and rationale appear in the audit row (optional annotations, never
+      required).
 - [ ] A tight poll loop trips the runaway budget guard (`FIREWALL_RUNAWAY_MAX`) rather
       than hammering the firewall's API.
 - [ ] A failed call (wrong uuid) is audited with `status=error` and records **no** undo.

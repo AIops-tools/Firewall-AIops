@@ -9,16 +9,30 @@ the tool now enforces them itself.
 The distinction matters. A guardrail in a prompt is a request. A guardrail in the
 harness is a guarantee. Anything below that we could move into the harness, we did.
 
+## Authorization is not this tool's job — decide it where it belongs
+
+Whether a write should happen is your decision, or the account's. The tool does
+not gate it — there is no read-only switch and no approval prompt to configure.
+The two right places to control read vs write:
+
+- **The account you connect with.** Give the OPNsense/pfSense API user a
+  read-only role. A write then fails at the server, which is the only place the
+  permission actually lives — no skill-side flag can be argued around by a model,
+  but a revoked permission cannot be.
+- **Your agent's system prompt.** If you want an observe-only session, tell the
+  model not to call the write tools (they are clearly tagged `[WRITE]`).
+
+What the tool *does* guarantee is that you can always see what happened:
+
 ## What the tool now enforces — do not waste prompt budget on these
 
 | You might be tempted to prompt | Why you don't need to |
 |---|---|
 | "Never restart the web GUI / lock yourself out" | **Already enforced.** `restart_service` refuses the daemon serving this appliance's own API (`nginx`, `lighttpd`, `configd`, `webgui`, ...), and `apply_changes` / `reconfigure` refuse a staged rule set that would provably cut management access. Both are exact and fail open — see `capabilities.md`. Do not spend prompt budget on it. |
-| "Work read-only, never change a rule" | Set `FIREWALL_READ_ONLY=1`. The nine write tools (`toggle_rule`, `apply_changes`, `add_alias_entry`, `remove_alias_entry`, `kill_states`, `restart_service`, `reconfigure`, `reboot`, `undo_apply`) are then **not registered at all** — they never appear in the tool list, so the model cannot call one even if it tries. The `@governed_tool` harness independently refuses writes, so the CLI is covered too. |
 | "Don't invent a value when a field is missing" | OPNsense and pfSense populate different keys for the same concept. A field neither platform returned comes back as `null`, never as `""`. Absent and empty are distinguishable in the payload. |
 | "Tell me if the output was cut off" | `firewall_log`, `states_table` and `top_talkers` return `{"entries": [...], "returned": N, "limit": L, "truncated": true/false}`. Truncation is measured, not guessed from a length coincidence. |
 | "Preserve the ordering / tell me what's most urgent" | The RCA tools (`gateway_health_rca`, `rule_hit_and_shadow_analysis`, `blocked_traffic_rca`) return findings with the measured numbers attached, worst-first. Priority is in the payload, not implied by list position. |
-| "Confirm before anything destructive" | Write operations require a `--dry-run`-able preview plus double confirmation at the CLI, and a named approver (`FIREWALL_AUDIT_APPROVED_BY`) for high-risk tiers. |
+| "Confirm before anything destructive" | Write operations require a `--dry-run`-able preview plus double confirmation at the CLI. |
 | "Log what you did" | Every governed call is audited to `~/.firewall-aiops/audit.db` regardless of what the model says it did. |
 
 ## What still needs a prompt
@@ -68,24 +82,23 @@ CHANGES ARE TWO-STEP
 
 ## Recommended setup for a local model
 
+Start with a connection that *cannot* write, verify, and widen the account's
+permission only when you trust the setup. A read-only role is a sensible default
+for a firewall specifically: a mistaken `toggle_rule` or `reboot` on the box that
+carries your management session locks you out of the thing you were trying to fix.
+
 ```bash
-# Read-only until you trust the setup — this is enforced, not advisory.
-export FIREWALL_READ_ONLY=1
+# Give the OPNsense/pfSense API user a read-only role, then:
 firewall-aiops doctor
 ```
 
-Then, when you are ready to allow writes, unset it and set an approver so the
-high-risk tier has an accountable name on it:
+Optionally annotate the audit trail with who is operating and why — recorded on
+every row, never required:
 
 ```bash
-unset FIREWALL_READ_ONLY
 export FIREWALL_AUDIT_APPROVED_BY="your.name@example.com"
 export FIREWALL_AUDIT_RATIONALE="scheduled maintenance window 2026-07-20"
 ```
-
-Read-only mode is a sensible default for a firewall specifically: a mistaken
-`toggle_rule` or `reboot` on the box that carries your management session locks
-you out of the thing you were trying to fix.
 
 ## If your model still struggles
 

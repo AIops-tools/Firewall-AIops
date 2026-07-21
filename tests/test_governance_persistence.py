@@ -3,8 +3,8 @@
 The other governance tests monkeypatch the stores and only verify that undo
 descriptors are *constructed*. These tests bind the whole harness to a
 throwaway home (``FIREWALL_AIOPS_HOME``) and assert that the rows compliance
-evidence is built from actually land on disk, and that the secure-by-default
-approver gate (no rules.yaml → high/critical needs an approver) enforces.
+evidence is built from actually land on disk — every governed call lands an
+audit row, and a reversible write also lands an undo token.
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ import firewall_aiops.governance.audit as audit_mod
 import firewall_aiops.governance.policy as policy_mod
 import firewall_aiops.governance.undo as undo_mod
 from firewall_aiops.governance import (
-    PolicyDenied,
     capture_prior_state,
     governed_tool,
     mark_unknown,
@@ -34,10 +33,9 @@ def _reset_singletons() -> None:
 
 @pytest.fixture
 def gov_home(tmp_path, monkeypatch):
-    """Bind the harness to a temp home with NO approver and NO rules file."""
+    """Bind the harness to a throwaway home with no approver annotation set."""
     monkeypatch.setenv("FIREWALL_AIOPS_HOME", str(tmp_path))
     monkeypatch.delenv("FIREWALL_AUDIT_APPROVED_BY", raising=False)
-    monkeypatch.delenv("FIREWALL_POLICY_DISABLED", raising=False)
     _reset_singletons()
     yield tmp_path
     _reset_singletons()
@@ -93,41 +91,32 @@ def test_medium_write_persists_audit_and_undo_rows(gov_home):
 
 
 @pytest.mark.unit
-def test_high_risk_denied_without_approver_and_denial_is_audited(gov_home):
-    """Secure by default: no rules.yaml + no approver → high risk is denied,
-    and the denial itself must land in the audit log."""
-    with pytest.raises(PolicyDenied, match="requires 'dual' approval"):
-        _drop_widget(name="w2", target="fw1")
+def test_high_risk_runs_without_an_approver_and_is_audited(gov_home):
+    """The skill no longer authorizes. A high-risk write with no approver
+    recorded runs to completion — whether it *should* is the agent's decision
+    or the account's permissions — and it is audited either way."""
+    result = _drop_widget(name="w2", target="fw1")
+    assert result["status"] == "dropped"
 
     audit = _rows(gov_home / "audit.db", "audit_log")
     assert len(audit) == 1
     assert audit[0]["tool"] == "_drop_widget"
-    assert audit[0]["status"] == "denied"
-    assert audit[0]["risk_tier"] == "dual"
-
-    assert not (gov_home / "undo.db").exists() or not _rows(gov_home / "undo.db", "undo_log")
+    assert audit[0]["status"] == "ok"
+    # risk_tier is still recorded as a descriptive label — it just gates nothing.
+    assert audit[0]["risk_tier"] == "review"
 
 
 @pytest.mark.unit
-def test_high_risk_allowed_with_named_approver(gov_home, monkeypatch):
+def test_an_approver_is_still_recorded_when_supplied(gov_home, monkeypatch):
+    """approved_by is optional audit context now, not a gate: supplying it does
+    nothing but annotate the trail."""
     monkeypatch.setenv("FIREWALL_AUDIT_APPROVED_BY", "netops-alice")
     result = _drop_widget(name="w3", target="fw1")
     assert result["status"] == "dropped"
 
     audit = _rows(gov_home / "audit.db", "audit_log")
-    assert len(audit) == 1
     assert audit[0]["status"] == "ok"
     assert audit[0]["approved_by"] == "netops-alice"
-
-
-@pytest.mark.unit
-def test_operator_rules_file_restores_tier_none_for_high_risk(gov_home):
-    """An operator-authored rules.yaml (without risk_tiers) is an explicit
-    choice: the default dual gate must stand down."""
-    (gov_home / "rules.yaml").write_text("deny: []\n", "utf-8")
-    _reset_singletons()
-    result = _drop_widget(name="w4", target="fw1")
-    assert result["status"] == "dropped"
 
 
 @pytest.mark.unit
@@ -216,10 +205,9 @@ def test_dry_run_records_no_undo_token(gov_home):
 
 
 @pytest.mark.unit
-def test_dry_run_of_a_high_risk_op_does_not_demand_an_approver(gov_home):
-    """Requiring a named human approver before you may ask "would this be
-    permitted?" inverts what a preview is for — you would need the approval to
-    learn whether one is needed."""
+def test_a_high_risk_preview_and_its_write_both_run_and_audit(gov_home):
+    """No gate stands between a caller and either the preview or the write. Both
+    are audited; the preview records no undo (nothing changed)."""
 
     @governed_tool(risk_level="high")
     def _drop_thing(name: str, dry_run: bool = False, target: str = "") -> dict:
@@ -229,14 +217,13 @@ def test_dry_run_of_a_high_risk_op_does_not_demand_an_approver(gov_home):
 
     preview = _drop_thing(name="w5", dry_run=True, target="prod-host")
     assert preview["wouldDrop"] == "w5"
-
     audit = _rows(gov_home / "audit.db", "audit_log")
     assert audit[-1]["status"] == "ok"
-    assert audit[-1]["risk_tier"] == "dual", "the tier is still computed and audited"
+    assert audit[-1]["risk_tier"] == "review", "the tier is still recorded, as a label"
 
-    # The write itself stays gated — the preview is the only thing let through.
-    with pytest.raises(PolicyDenied, match="requires 'dual' approval"):
-        _drop_thing(name="w5", dry_run=False, target="prod-host")
+    result = _drop_thing(name="w5", dry_run=False, target="prod-host")
+    assert result["status"] == "dropped"
+    assert _rows(gov_home / "audit.db", "audit_log")[-1]["status"] == "ok"
 
 
 # ── Undetermined outcomes ──────────────────────────────────────────────────

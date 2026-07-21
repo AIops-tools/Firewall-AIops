@@ -38,8 +38,10 @@ Every MCP tool runs through the bundled `@governed_tool` harness
 - **Token/runaway budget** — hard ceilings (`FIREWALL_MAX_TOOL_CALLS` /
   `FIREWALL_MAX_TOOL_SECONDS`) plus an on-by-default guard that trips a tight
   poll/retry loop, preventing unbounded API consumption.
-- **Graduated risk tiers** — `~/.firewall-aiops/rules.yaml` `risk_tiers` gate
-  writes by environment/tag; the highest tiers require a recorded approver.
+- **Risk-tier labelling** — each tool's declared `risk_level` is recorded on its
+  audit row as a descriptive tier (a label, not a gate). There is no read-only
+  switch, policy file, or approval gate: whether a write is permitted is the
+  agent's judgement or the connecting account's permissions.
 - **Undo-token recording** — reversible writes capture the BEFORE state (via a
   real GET) and record an inverse descriptor (e.g. `toggle_rule` restores the
   prior enabled flag; `add_alias_entry`→`remove_alias_entry`) so the change can
@@ -47,11 +49,12 @@ Every MCP tool runs through the bundled `@governed_tool` harness
 
 ### State-Changing Operations
 The "make it live" commits — `apply_changes`, `reconfigure` — and `reboot` are
-`risk_level=high`, accept a `dry_run` preview, and (under `risk_tiers`) require a
-recorded approver (`FIREWALL_AUDIT_APPROVED_BY` + `FIREWALL_AUDIT_RATIONALE`).
-`reboot` is irreversible (audit only, no undo). Rule toggle, alias entry
-add/remove, `kill_states`, and `restart_service` are `risk_level=medium`;
-reversible ones capture before-state and record an undo token.
+`risk_level=high` and accept a `dry_run` preview. `reboot` is irreversible (audit
+only, no undo). Rule toggle, alias entry add/remove, `kill_states`, and
+`restart_service` are `risk_level=medium`; reversible ones capture before-state
+and record an undo token. `FIREWALL_AUDIT_APPROVED_BY` and
+`FIREWALL_AUDIT_RATIONALE` are optional audit annotations, recorded on the audit
+row when set but never required.
 
 ### SSL/TLS Verification
 `verify_ssl` defaults to true; disable only for self-signed lab certificates.

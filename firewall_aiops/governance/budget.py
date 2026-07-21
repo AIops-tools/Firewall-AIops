@@ -1,24 +1,26 @@
-"""Per-process tool-call budget + runaway-loop circuit breaker.
+"""Runaway-loop safety guard + opt-in per-process call/time ceiling.
 
-Implements the 2026 agentic-ops "termination condition" / "hard budget"
-guardrail. An LLM agent that loops a tool (polling a long task, retrying a
+A safety backstop, NOT authorization: it never looks at whether an operation is
+a read or a write, only at whether the same call is being hammered pointlessly.
+An LLM agent that gets stuck looping a tool (polling a long task, retrying a
 flaky call) otherwise consumes unbounded calls and wall-time — exactly the
 failure mode behind the "deleting one snapshot burned 26k tokens over 30 min"
-incident. Two layers, both enforced from the ``@governed_tool`` pre-check:
+incident. A stuck agent cannot self-correct by definition, so this stops it.
+Two layers, both enforced from the ``@governed_tool`` pre-check:
 
 1. **Hard ceilings (opt-in via env).** Total tool calls and cumulative
    wall-time per process. ``FIREWALL_MAX_TOOL_CALLS`` / ``FIREWALL_MAX_TOOL_SECONDS``.
-   Unset (the default) means no ceiling — existing behavior is unchanged.
+   Unset (the default) means no ceiling.
 
-2. **Runaway breaker (on by default).** The same ``(tool, params)`` called more
-   than ``FIREWALL_RUNAWAY_MAX`` times within ``FIREWALL_RUNAWAY_WINDOW_SEC`` trips a
-   short cooldown. Catches a tight poll/retry loop without affecting normal,
-   varied tool use. Defaults are generous (25 identical calls in 120s).
+2. **Runaway breaker (on by default, disable with ``FIREWALL_RUNAWAY_MAX=0``).**
+   The same ``(tool, params)`` called more than ``FIREWALL_RUNAWAY_MAX`` times
+   within ``FIREWALL_RUNAWAY_WINDOW_SEC`` trips a short cooldown. Catches a tight
+   poll/retry loop without affecting normal, varied tool use. Defaults are
+   generous (25 identical calls in 120s), so ordinary use never trips it.
 
-Exceeding any limit raises :class:`BudgetExceeded`, a :class:`PolicyDenied`
-subclass so the decorator and downstream handlers treat it as a denial carrying
-a teaching message (and audit it as a denied call). The exception is a *hard
-stop*: it forces the agent to break out of the loop rather than keep spending.
+Exceeding any limit raises :class:`BudgetExceeded`, carrying a teaching message.
+The exception is a *hard stop*: it forces the agent to break out of the loop
+rather than keep spending, and the harness audits it as a stopped call.
 """
 
 from __future__ import annotations
@@ -30,8 +32,6 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from firewall_aiops.governance.policy import PolicyResult
-
 __all__ = ["BudgetExceeded", "BudgetTracker", "get_budget", "reset_budget"]
 
 
@@ -41,19 +41,16 @@ _DEFAULT_RUNAWAY_WINDOW_SEC = 120
 
 
 class BudgetExceeded(Exception):
-    """Raised when a tool call would exceed a budget / runaway limit.
+    """Raised when a tool call would exceed a ceiling or trip the runaway guard.
 
-    Subclasses nothing firewall-specific; the decorator wraps it into a
-    PolicyResult so it shares the existing denial audit path. Kept as its own
-    type (not raw PolicyDenied) so callers can catch budget stops distinctly.
+    Its own type (not a policy denial) so callers can catch a runaway/budget
+    stop distinctly. Carries ``reason`` (a teaching message) and ``rule`` (which
+    limit tripped) for the audit row.
     """
 
     def __init__(self, reason: str, rule: str = "budget") -> None:
         self.reason = reason
         self.rule = rule
-        # A PolicyResult mirrors what the policy engine returns on denial, so
-        # the decorator can treat budget stops and policy denials uniformly.
-        self.policy_result = PolicyResult(allowed=False, rule=rule, reason=reason)
         super().__init__(reason)
 
 

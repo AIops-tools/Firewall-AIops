@@ -1,9 +1,9 @@
 """Tests for the ``firewall-aiops init`` onboarding wizard.
 
 The wizard is driven end-to-end through Typer's CliRunner with every path
-(config.yaml, secrets.enc, rules.yaml) isolated under tmp_path. The master
-password comes from FIREWALL_AIOPS_MASTER_PASSWORD (the non-interactive path)
-and the hidden API-secret prompt is patched at the getpass boundary.
+(config.yaml, secrets.enc) isolated under tmp_path. The master password comes
+from FIREWALL_AIOPS_MASTER_PASSWORD (the non-interactive path) and the hidden
+API-secret prompt is patched at the getpass boundary.
 """
 
 from __future__ import annotations
@@ -110,23 +110,12 @@ def test_init_stores_secret_encrypted_not_in_config(init_home):
 
 
 @pytest.mark.unit
-def test_init_seeds_default_rules_with_dual_control_tier(init_home):
+def test_init_writes_no_policy_rules(init_home):
+    """The skill no longer authorizes, so init seeds no rules.yaml — a fresh
+    install delivers full functionality and leaves permission to the account."""
     result = _run_init()
     assert result.exit_code == 0, result.output
-    rules = yaml.safe_load((init_home / "rules.yaml").read_text("utf-8"))
-    tiers = {r["name"]: r for r in rules["risk_tiers"]}
-    assert "high-risk-requires-approver" in tiers
-    assert tiers["high-risk-requires-approver"]["tier"] == "dual"
-    assert tiers["high-risk-requires-approver"]["min_risk_level"] == "high"
-
-
-@pytest.mark.unit
-def test_init_rerun_does_not_clobber_existing_rules(init_home):
-    sentinel = "# operator-authored rules — must survive re-init\nrisk_tiers: []\n"
-    (init_home / "rules.yaml").write_text(sentinel, "utf-8")
-    result = _run_init()
-    assert result.exit_code == 0, result.output
-    assert (init_home / "rules.yaml").read_text("utf-8") == sentinel
+    assert not (init_home / "rules.yaml").exists()
 
 
 @pytest.mark.unit

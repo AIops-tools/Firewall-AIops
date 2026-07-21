@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.0 — 2026-07-21
+
+### Changed (BREAKING)
+- **Removed the authorization layer** — read-only mode, the approver gate, and rules.yaml deny are gone. The skill no longer decides read vs write; that is the agent's judgement or the connecting account's permissions. `<PREFIX>_READ_ONLY` now has no effect (a startup warning is logged); `<PREFIX>_AUDIT_APPROVED_BY`/`_RATIONALE` are optional audit annotations.
+- The retained guarantee is **unbypassable audit over MCP and CLI alike** — no unaudited entry point. Harness = audit + runaway safety guard + undo + sanitize; `risk_level` is a descriptive audit label, not a gate.
+
+See RELEASE_NOTES.md for tool-specific changes.
+
+
 ## v0.5.0 — 2026-07-20
 
 ### Fixed

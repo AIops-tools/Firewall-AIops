@@ -27,8 +27,8 @@ def isolate_harness_home(tmp_path_factory, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _default_approver(monkeypatch):
-    """The policy layer is secure-by-default: with no rules.yaml, high/critical
-    governed calls require a named approver. Tests exercising tool behavior
-    are not about that gate, so record a synthetic approver globally; the
-    governance-persistence tests remove it to test the gate itself."""
+    """FIREWALL_AUDIT_APPROVED_BY is an optional audit annotation now, not a
+    gate — nothing requires it and it blocks nothing. Setting it globally just
+    means the audit rows tests inspect carry a stable approved_by value; the
+    governance-persistence tests clear it where they check the unset case."""
     monkeypatch.setenv("FIREWALL_AUDIT_APPROVED_BY", "pytest")

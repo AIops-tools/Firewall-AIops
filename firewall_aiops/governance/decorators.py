@@ -1,7 +1,8 @@
-"""The ``@governed_tool`` decorator — mandatory wrapper for all firewall MCP tool functions.
+"""The ``@governed_tool`` decorator — mandatory wrapper for all container-host MCP tool functions.
 
 Responsibilities:
-  1. Pre-check: evaluate policy rules (deny, maintenance window)
+  1. Pre-check: tag the risk tier for audit + run the runaway/budget safety guard
+     (no authorization — the skill does not decide read vs write)
   2. Execute: run the actual tool function
   3. Post-log: write audit record to ``~/.firewall-aiops/audit.db``
   4. Metadata: attach risk_level, idempotent, timeout, sensitive_params
@@ -40,19 +41,20 @@ from firewall_aiops.governance.outcome import (
     take_prior_state,
 )
 from firewall_aiops.governance.patterns import PatternMatch, get_pattern_engine
-from firewall_aiops.governance.policy import PolicyResult, get_policy_engine
-from firewall_aiops.governance.readonly import is_read_only, read_only_denial
+from firewall_aiops.governance.policy import get_policy_engine
 from firewall_aiops.governance.sanitize import sanitize
 
 _log = logging.getLogger("firewall-aiops.decorators")
 
 
 class PolicyDenied(Exception):
-    """Raised when an operation is denied by policy."""
+    """Retained for backward compatibility with callers that catch it.
 
-    def __init__(self, result: PolicyResult) -> None:
-        self.result = result
-        super().__init__(result.reason)
+    The skill no longer makes authorization decisions — read-only mode, deny
+    rules and the approver gate were all removed — so nothing raises this any
+    more. It stays defined and caught so existing ``except PolicyDenied`` sites
+    keep compiling; the live stop path is :class:`BudgetExceeded` (runaway).
+    """
 
 
 def governed_tool(
@@ -64,7 +66,7 @@ def governed_tool(
     sensitive_params: list[str] | None = None,
     undo: Any = None,
 ) -> Any:
-    """Decorator for all firewall MCP tool functions.
+    """Decorator for all container-host MCP tool functions.
 
     Can be used with or without arguments::
 
@@ -158,7 +160,7 @@ class _CallState:
 
     __slots__ = (
         "skill", "tool_name", "agent", "start", "status", "result",
-        "policy_result", "pattern_match", "audit", "policy",
+        "pattern_match", "audit",
         "safe_params", "env", "risk_level", "timeout_seconds",
         "rationale", "approved_by", "risk_tier", "undo", "dry_run",
     )
@@ -185,28 +187,26 @@ class _CallState:
         self.start = time.time()
         self.status = "ok"
         self.result: Any = None
-        self.policy_result: PolicyResult | None = None
         self.pattern_match: PatternMatch | None = None
         self.risk_level = risk_level
         self.timeout_seconds = timeout_seconds
         self.audit = get_engine()
-        self.policy = get_policy_engine()
 
         # Map positional args to parameter names so they appear in the audit
         # log and participate in env scoping (previously only kwargs did).
         params = _bind_params(signature, args, kwargs)
         self.safe_params = _redact(params, sensitive)
-        # Previews are governed like any other call — audited, policy-checked,
-        # budget-counted — but they change nothing, so two things must not apply
-        # to them: the named-approver gate, and undo recording.
+        # Previews are governed like any other call — audited, budget-counted —
+        # but they change nothing, so undo recording must not apply to them.
         self.dry_run = bool(params.get("dry_run", False))
         env = params.get("target", params.get("env", ""))
         self.env = str(env) if env else ""
 
-        # Accountability trail (SOC2 / 等保: who authorized this, and why).
-        # Sourced from env so an approval gate / pilot can inject context
-        # without changing every tool signature. risk_tier is filled by the
-        # policy pre-check (graduated autonomy).
+        # Optional accountability context for the audit trail (SOC2 / 等保: who
+        # authorized this, and why). Read from env so an operator or pilot can
+        # annotate the trail without changing any tool signature. Purely
+        # recorded — never required, never enforced. risk_tier is filled by the
+        # pre-check as a descriptive label for the row.
         self.rationale = os.environ.get("FIREWALL_AUDIT_RATIONALE", "")
         self.approved_by = os.environ.get("FIREWALL_AUDIT_APPROVED_BY", "")
         self.risk_tier = ""
@@ -241,73 +241,22 @@ def _bind_params(
 
 
 def _pre_check(state: _CallState) -> None:
-    """Policy pre-check + L5 auto-remediation pattern consult.
+    """Risk-tier tagging + runaway guard + auto-remediation pattern consult.
 
-    Raises PolicyDenied when policy denies the call. Pattern engine failures
-    never block the call (fail-open by design — a broken pattern file must
-    not take down every MCP tool).
+    Deliberately does NO authorization. Whether a read or a write is permitted
+    is the agent's decision or the connecting account's permissions, not the
+    skill's — read-only mode, deny rules and the approver gate were all removed.
+    What happens here: the operation's risk tier is recorded for the audit
+    trail, the runaway/budget guard (a safety stop, not an authz gate) is
+    applied, and the pattern engine is consulted. A broken pattern file must
+    never take down a tool, so that consult is fail-open.
     """
-    # Read-only mode is a hard switch, checked before policy so that no write
-    # reaches an API regardless of entry point (MCP, CLI, or in-process) and
-    # regardless of what rules.yaml says. risk_level 'low' == a read.
-    if state.risk_level != "low" and is_read_only():
-        reason = read_only_denial(state.tool_name)
-        denial = PolicyResult(allowed=False, rule="read_only", reason=reason)
-        state.policy_result = denial
-        state.status = "denied"
-        state.result = {"error": reason, "rule": denial.rule}
-        raise PolicyDenied(denial)
+    # Descriptive label for the audit row (e.g. a high-risk delete). Gates nothing.
+    state.risk_tier = get_policy_engine().tier_for(state.risk_level)
 
-    state.policy_result = state.policy.check_allowed(
-        state.tool_name,
-        env=state.env,
-        risk_level=state.risk_level,
-        params=state.safe_params,
-    )
-    if not state.policy_result.allowed:
-        state.status = "denied"
-        state.result = {
-            "error": state.policy_result.reason,
-            "rule": state.policy_result.rule,
-        }
-        raise PolicyDenied(state.policy_result)
-
-    # Graduated autonomy — what approval tier does this op need? Record it on
-    # the audit trail, and enforce: tiers that require a named approver (dual /
-    # review) are denied when none was recorded (FIREWALL_AUDIT_APPROVED_BY).
-    tier = state.policy.required_approval_tier(
-        state.tool_name,
-        env=state.env,
-        risk_level=state.risk_level,
-        params=state.safe_params,
-    )
-    state.risk_tier = tier.tier
-    # A preview is not the operation. Requiring a named human approver before a
-    # caller may ask "would this even be permitted?" inverts what a preview is
-    # for — you would have to obtain the approval in order to learn whether the
-    # thing needs one, or would be refused outright. The tier is still computed
-    # and still audited, so the preview can TELL the caller an approver will be
-    # needed; it just does not demand one to answer. Deny rules, budget, the
-    # read-only switch and every self-lockout guard still apply, and the write
-    # itself is gated normally.
-    if tier.requires_approver and not state.approved_by and not state.dry_run:
-        reason = (
-            f"Operation '{state.tool_name}' on '{state.env or 'target'}' requires "
-            f"'{tier.tier}' approval (rule: {tier.rule}) but no approver is recorded. "
-            f"Set FIREWALL_AUDIT_APPROVED_BY to the authorizing human (and "
-            f"FIREWALL_AUDIT_RATIONALE to why) before retrying."
-        )
-        if tier.reason:
-            reason += f" Policy note: {tier.reason}"
-        denial = PolicyResult(allowed=False, rule=f"approval_tier:{tier.tier}", reason=reason)
-        state.policy_result = denial
-        state.status = "denied"
-        state.result = {"error": reason, "rule": denial.rule}
-        raise PolicyDenied(denial)
-
-    # Budget / runaway guard — only for calls policy already allowed, so denied
-    # calls do not count. A trip raises BudgetExceeded (a hard stop); record the
-    # denial on state so _finalize audits it.
+    # Runaway / budget guard — a safety backstop for a stuck loop, not an
+    # authorization decision. A trip raises BudgetExceeded (a hard stop); mark
+    # it on state so _finalize audits the stopped call.
     try:
         get_budget().check_and_record(state.tool_name, state.safe_params)
     except BudgetExceeded as exc:
@@ -326,9 +275,11 @@ def _pre_check(state: _CallState) -> None:
 def _annotate_result(state: _CallState, result: Any) -> Any:
     """Record the result, surface pattern context, and record an undo token.
 
-    Runs only on the success path (the wrapper calls it with the function's
-    return value), so a recorded undo always corresponds to a change that
-    actually happened.
+    Runs on the path where the tool returned a value — which includes the
+    failures ``tool_errors`` sanitized into an ``{"error": ...}`` dict. Those
+    are not all alike: one whose response was merely lost may well have taken
+    effect, so :func:`_record_undo` treats it separately rather than assuming
+    nothing happened.
     """
     state.result = result
     if (
@@ -350,14 +301,14 @@ def _record_undo(state: _CallState, result: Any) -> None:
     * **Confirmed** — the tool returned normally, so ``result`` carries the
       before-state its undo callable needs. Recorded ``effect_verified=True``.
     * **Undetermined** — the response was lost (see
-      :mod:`firewall_aiops.governance.outcome`). The change may be live, so an
-      inverse still matters, but ``result`` is only an error payload. An
+      :mod:`firewall_aiops.governance.outcome`). The change may be live,
+      so an inverse still matters, but ``result`` is only an error payload. An
       inverse is recorded ONLY when the write explicitly stashed its
-      before-state via ``capture_prior_state``; synthesizing one from an
-      empty result would produce a *wrong* inverse, which is worse than none.
+      before-state via ``capture_prior_state``; synthesizing one from an empty
+      result would produce a *wrong* inverse, which is worse than none.
 
-    Best-effort throughout: a broken undo callable or store must never fail
-    the call. Attaches ``_undo_id`` to dict results for later reference.
+    Best-effort throughout: a broken undo callable or store must never fail the
+    call. Attaches ``_undo_id`` to dict results so the caller can reference it.
     """
     if state.undo is None:
         return
@@ -384,7 +335,7 @@ def _record_undo(state: _CallState, result: Any) -> None:
         verified = False
         undo_input = {"priorState": prior, "outcomeUnknown": True}
     elif isinstance(result, dict) and result.get("error"):
-        return  # definite failure — no change happened, so no inverse
+        return  # definite failure — no change happened, so no inverse to record
 
     try:
         descriptor = state.undo(state.safe_params, undo_input)
@@ -428,7 +379,9 @@ def _finalize(state: _CallState) -> None:
     """Audit + circuit-breaker bookkeeping. Runs in the wrapper's finally."""
     # A sanitized failure (@tool_errors converts exceptions into {"error": ...}
     # dicts BEFORE this harness sees them) must not be audited as success —
-    # compliance exception reports are built from this status.
+    # compliance exception reports are built from this status. 'unknown' is a
+    # distinct verdict, not a softer 'error': the request may have taken effect,
+    # so the row must not assert a failure the tool cannot actually vouch for.
     if state.status == "ok" and isinstance(state.result, dict) and state.result.get("error"):
         state.status = "unknown" if is_unknown(state.result) else "error"
 
@@ -441,15 +394,14 @@ def _finalize(state: _CallState) -> None:
         pass
 
     # timeout_seconds is advisory: exceeding it logs a warning, no hard
-    # cancellation (cancelling mid-flight firewall calls is worse).
+    # cancellation (cancelling mid-flight container-host calls is worse).
     if state.timeout_seconds and duration > state.timeout_seconds * 1000:
         _log.warning(
             "%s.%s took %dms — exceeded timeout_seconds=%d (advisory, not cancelled)",
             state.skill, state.tool_name, duration, state.timeout_seconds,
         )
 
-    bypassed = state.policy_result and state.policy_result.rule == "policy_disabled"
-    final_status = f"{state.status}_bypassed" if bypassed else state.status
+    final_status = state.status
 
     # Update circuit-breaker state for armed patterns
     if state.pattern_match and state.pattern_match.armed:

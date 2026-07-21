@@ -6,10 +6,10 @@ Portable across the whole tool line: references ONLY
 defined inline — no real ops / cli / connection / mcp_server tool is imported.
 
 Exercises the async wrapper (audit parity with sync), the error-capture path
-with secret redaction, BudgetExceeded + PolicyDenied propagation, positional /
-var-arg binding, sensitive-param redaction (nested), undo recording + failure
-tolerance, pattern arming + circuit-breaker bookkeeping, the timeout advisory,
-and the sanitized-error → status=error rule.
+with secret redaction, BudgetExceeded propagation, positional / var-arg binding,
+sensitive-param redaction (nested), undo recording + failure tolerance, pattern
+arming + circuit-breaker bookkeeping, the timeout advisory, the sanitized-error →
+status=error rule, and that a high-risk write is audited but never gated.
 
 Because these functions live in the test module, ``_infer_skill`` classifies
 them as skill ``"unknown"`` — patterns under test therefore target that skill,
@@ -30,7 +30,7 @@ import firewall_aiops.governance.decorators as dec_mod
 import firewall_aiops.governance.patterns as patterns_mod
 import firewall_aiops.governance.policy as policy_mod
 import firewall_aiops.governance.undo as undo_mod
-from firewall_aiops.governance import PolicyDenied, governed_tool
+from firewall_aiops.governance import governed_tool
 from firewall_aiops.governance.budget import BudgetExceeded
 
 
@@ -46,7 +46,6 @@ def _reset() -> None:
 def dec_home(tmp_path, monkeypatch):
     monkeypatch.setenv("FIREWALL_AIOPS_HOME", str(tmp_path))
     monkeypatch.setenv("FIREWALL_AUDIT_APPROVED_BY", "pytest")
-    monkeypatch.delenv("FIREWALL_POLICY_DISABLED", raising=False)
     monkeypatch.delenv("FIREWALL_MAX_TOOL_CALLS", raising=False)
     monkeypatch.delenv("FIREWALL_MAX_TOOL_SECONDS", raising=False)
     _reset()
@@ -222,7 +221,7 @@ def test_sanitized_error_result_marked_error(dec_home):
     assert row["status"] == "error"
 
 
-# ── Budget + policy denial propagation ─────────────────────────────────
+# ── Budget guard propagation ───────────────────────────────────────────
 
 
 @pytest.mark.unit
@@ -237,24 +236,6 @@ def test_budget_exceeded_propagates_and_audits(dec_home, monkeypatch):
         _budgeted(target="db")
     row = _audit_rows(dec_home)[-1]
     assert row["status"] == "budget_exceeded"
-
-
-@pytest.mark.unit
-def test_policy_denied_propagates_and_audits(dec_home):
-    (dec_home / "rules.yaml").write_text(
-        "deny:\n  - name: block_drops\n    operations: ['_drop_*']\n", "utf-8"
-    )
-    _reset()
-
-    @governed_tool
-    def _drop_thing(target: str = "") -> dict:
-        return {"ok": True}
-
-    with pytest.raises(PolicyDenied):
-        _drop_thing(target="db")
-    row = _audit_rows(dec_home)[-1]
-    assert row["status"] == "denied"
-    assert row["tool"] == "_drop_thing"
 
 
 # ── Sensitive param redaction (nested) ─────────────────────────────────
@@ -436,17 +417,19 @@ def test_add_duration_failure_does_not_fail_call(dec_home, monkeypatch):
     assert _audit_rows(dec_home)[-1]["status"] == "ok"
 
 
-# ── policy_disabled bypass status suffix ───────────────────────────────
+# ── No authorization gating ────────────────────────────────────────────
 
 
 @pytest.mark.unit
-def test_policy_disabled_marks_status_bypassed(dec_home, monkeypatch):
-    monkeypatch.setenv("FIREWALL_POLICY_DISABLED", "1")
-    _reset()
+def test_a_high_risk_write_is_not_gated_only_audited(dec_home):
+    """The harness authorizes nothing: a high-risk write with no approver, no
+    rules file and no read-only switch runs and lands an 'ok' audit row."""
 
     @governed_tool(risk_level="high")
     def _op(target: str = "") -> dict:
         return {"ok": True}
 
-    _op(target="db")
-    assert _audit_rows(dec_home)[-1]["status"] == "ok_bypassed"
+    assert _op(target="db")["ok"] is True
+    row = _audit_rows(dec_home)[-1]
+    assert row["status"] == "ok"
+    assert row["risk_tier"] == "review"

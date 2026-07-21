@@ -3,10 +3,10 @@
 Every governed write records a replayable inverse descriptor (tool + params) to
 ``undo.db``. This module closes the loop: ``undo_apply`` looks up a recorded
 descriptor and dispatches it to the named governed tool, so the inverse runs on
-the SAME governance path as any other call (audited, budget-checked, and — if
-the inverse itself is destructive — re-gated by its own risk tier / approver
-requirement). ``undo_apply`` is itself governed; the real risk is enforced by
-the inner tool it calls.
+the SAME governance path as any other call (audited and budget-checked, and — if
+the inverse itself is destructive — labelled with its own risk tier in the audit
+row). ``undo_apply`` is itself governed; whether the inverse should run is the
+caller's decision, exactly as for a first-hand write.
 
 Note: recorded ``undo_params`` are the redacted safe-params captured at record
 time, so an inverse that would need a secret value cannot be replayed here — by
@@ -79,9 +79,9 @@ def undo_list(limit: int = 50, target: Optional[str] = None) -> dict:
 def undo_apply(undo_id: str, dry_run: bool = False, target: Optional[str] = None) -> dict:
     """[WRITE][risk=medium] Apply a recorded undo by dispatching its inverse tool.
 
-    The inverse runs through its own governed tool, so its real risk tier and
-    any approver requirement are enforced there. Pass dry_run=True to preview
-    the inverse call without executing it. A token can only be applied once.
+    The inverse runs through its own governed tool, so it is audited and labelled
+    with its own risk tier there. Pass dry_run=True to preview the inverse call
+    without executing it. A token can only be applied once.
 
     Args:
         undo_id: The undoId from undo_list (or an ``_undo_id`` in a write result).
@@ -98,12 +98,27 @@ def undo_apply(undo_id: str, dry_run: bool = False, target: Optional[str] = None
         )
 
     inverse_tool = rec["undo_tool"]
+    # Unreadable parameters must stop the replay, not be replaced with {}.
+    # Defaulting dispatched the inverse tool with NO ARGUMENTS: for a tool whose
+    # parameters all have defaults that runs a real, unintended operation, and
+    # dry_run previewed it as a legitimate no-arg inverse. Refusing is the only
+    # honest answer — the recorded intent is gone, so there is nothing to apply.
+    raw = rec["undo_params"]
     try:
-        params = json.loads(rec["undo_params"]) if rec["undo_params"] else {}
-    except (ValueError, TypeError):
-        params = {}
+        params = json.loads(raw) if raw else {}
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            f"Undo '{undo_id}' has unreadable recorded parameters, so its inverse "
+            f"cannot be replayed. Inspect the row in undo.db and re-run the "
+            f"inverse tool '{inverse_tool}' by hand if the change still needs "
+            f"reversing."
+        ) from exc
     if not isinstance(params, dict):
-        params = {}
+        raise ValueError(
+            f"Undo '{undo_id}' recorded parameters of type "
+            f"'{type(params).__name__}' rather than an object, so its inverse "
+            f"cannot be replayed. Re-run the inverse tool '{inverse_tool}' by hand."
+        )
 
     fn = _resolve_tool(inverse_tool)
     if fn is None:
