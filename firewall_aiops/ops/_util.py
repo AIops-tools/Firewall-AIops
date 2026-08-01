@@ -79,8 +79,27 @@ def rule_enabled(row: dict) -> bool:
 
 
 def num(value: Any) -> float:
-    """Coerce a numeric cell to float; 0.0 when absent/non-numeric."""
+    """Coerce a numeric cell to float; 0.0 when absent/non-numeric.
+
+    Use only for genuine fractions/ratios/percentages. For counts, byte totals
+    and whole-second durations use :func:`as_int` — a count rendered as ``0.0``
+    is semantically wrong and equality assertions won't catch it (bug class #2).
+    """
     try:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def as_int(value: Any) -> int:
+    """Coerce a count/byte value to int; 0 when absent/non-numeric.
+
+    Companion to :func:`num` for integral quantities (rule evaluations, packet
+    and byte counters) so they never render as ``202.0``.
+    """
+    if isinstance(value, bool):
+        return 0
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0

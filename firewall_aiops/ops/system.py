@@ -19,10 +19,20 @@ def firmware_status(conn: Any) -> dict:
     try:
         obj = as_obj(conn.get(conn.platform.path("firmware")))
         obj = as_obj(pick(obj, "data")) or obj
+        # OPNsense's /core/firmware/status nests the version fields under
+        # "product" (product_version / CORE_VERSION / product_id); pfSense keeps
+        # them flat. Merge so version/product resolve on both — reading only the
+        # top level returned null on every real OPNsense.
+        src = {**obj, **as_obj(obj.get("product"))}
         return {
             "platform": conn.target.platform,
-            "version": opt(pick(obj, "product_version", "version", "installed_version")),
-            "product": opt(pick(obj, "product_name", "product", "base", "config_version")),
+            "version": opt(pick(src, "product_version", "CORE_VERSION",
+                                 "version", "installed_version")),
+            # product_id (OPNsense, nested) before product (pfSense, a flat
+            # string) — OPNsense's top-level "product" is a dict, so it must not
+            # win the pick.
+            "product": opt(pick(src, "product_name", "product_id", "product",
+                                 "base", "config_version")),
             "updatesAvailable": to_bool(
                 pick(obj, "status", "updates", "needs_update", default=False)
             ),

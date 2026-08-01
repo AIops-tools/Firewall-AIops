@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import as_obj, num, opt, pick, rule_enabled, s
+from firewall_aiops.ops._util import as_int, as_obj, opt, pick, rule_enabled, s
 
 
 def _norm_rule(r: dict) -> dict:
@@ -26,7 +26,7 @@ def _norm_rule(r: dict) -> dict:
         "destination": opt(pick(r, "destination_net", "destination", "dst")),
         "destinationPort": opt(pick(r, "destination_port", "dstport", "dport")),
         "description": opt(pick(r, "description", "descr", "label")),
-        "evaluations": num(pick(r, "evaluations", "evals", default=0)),
+        "evaluations": as_int(pick(r, "evaluations", "evals", default=0)),
     }
 
 
@@ -71,9 +71,9 @@ def rule_stats(conn: Any, top: int = 20) -> dict:
             {
                 "uuid": opt(pick(r, "uuid", "id", "tracker", "rule")),
                 "description": opt(pick(r, "description", "descr", "label")),
-                "evaluations": num(pick(r, "evaluations", "evals", "pcnt", default=0)),
-                "packets": num(pick(r, "packets", "pkts", default=0)),
-                "bytes": num(pick(r, "bytes", "bytes_total", default=0)),
+                "evaluations": as_int(pick(r, "evaluations", "evals", "pcnt", default=0)),
+                "packets": as_int(pick(r, "packets", "pkts", default=0)),
+                "bytes": as_int(pick(r, "bytes", "bytes_total", default=0)),
             }
             for r in rows
         ]

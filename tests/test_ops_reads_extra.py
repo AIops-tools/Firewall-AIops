@@ -276,6 +276,34 @@ def test_firmware_status_pfsense_unwraps_data():
 
 
 @pytest.mark.unit
+def test_firmware_status_opnsense_reads_nested_product():
+    """Regression (live-found on real OPNsense 26.7, 2026-08-01): OPNsense nests
+    the version under ``product`` (product_version / product_id), NOT at the top
+    level — reading the top level returned version=null on every real firewall."""
+    conn = _Conn(
+        {_p(OPNSENSE, "firmware"): {
+            "status": "none",
+            "product": {"product_version": "26.7", "product_id": "opnsense",
+                        "CORE_VERSION": "26.7"},
+        }},
+        platform=OPNSENSE,
+    )
+    out = system.firmware_status(conn)
+    assert out["version"] == "26.7"
+    assert out["product"] == "opnsense"  # product_id, not the product dict
+
+
+@pytest.mark.unit
+def test_rule_evaluation_count_is_int_not_float():
+    """Regression (bug class #2, live-observed on OPNsense 2026-08-01): a rule's
+    evaluation counter must render as int, not float (0.0) — a float count is
+    semantically wrong and equality assertions do not catch it."""
+    row = rules._norm_rule({"uuid": "u", "enabled": "1", "evaluations": 202.0})
+    assert row["evaluations"] == 202
+    assert isinstance(row["evaluations"], int)
+
+
+@pytest.mark.unit
 def test_health_status_fields():
     conn = _Conn({
         _p(OPNSENSE, "system_info"): {

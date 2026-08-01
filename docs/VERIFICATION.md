@@ -1,9 +1,48 @@
 # Live verification — OPNsense / pfSense
 
-`firewall-aiops` is exercised by a **mock-only** test suite (`uv run pytest`, no real
-firewall). It has **not** yet been validated end-to-end against a live OPNsense or
-pfSense box. This document says exactly what the mock suite already guarantees, and
-what a live run has to prove before anyone may describe this tool as verified against
+## ✅ OPNsense half — live-verified against real OPNsense 26.7 (2026-08-01)
+
+Verified end-to-end against a real OPNsense 26.7 firewall (pre-installed serial
+image in a KVM lab), driven through the real governed CLI + API key/secret
+(HTTP Basic) path. **Three real bugs the mock suite could not see — all fixed +
+regression-tested:**
+
+1. **Every read failed with `400 "Invalid JSON syntax"`.** The client set a global
+   `Content-Type: application/json` on *all* requests; OPNsense json-decodes the
+   request body whenever that header is present, so a bodyless GET (every read)
+   was rejected. Fixed: drop the global header — httpx adds it per-request only
+   when a call passes `json=` (the POST/PUT writes). Reproduced exactly with curl.
+2. **`version` came back `null` on every real OPNsense.** The version is nested
+   under `product` (`product_version` / `product_id` / `CORE_VERSION`), but the
+   code read the top level. Fixed by merging the `product` sub-object (pfSense's
+   flat shape still works).
+3. **Rule `evaluations` / `packets` / `bytes` rendered as float** (`0.0`) — bug
+   class #2. Added `as_int` and applied it to the count fields.
+
+Live loop that passed after the fixes: `doctor` (firmware/version query), `overview`
+(version 26.7, 2 interfaces up, 25 rules), `rules list` (matched the API), and a full
+**write → audit → undo → verified restore**: `rules toggle <uuid> --disable` → server
+reports `enabled=0` → `undo apply` → server `enabled=1`, `effectVerified: true`, both
+CLI write and undo audited.
+
+> **API-key setup (no GUI needed):** OPNsense stores the apikey secret as
+> `key|crypt($secret,'$6$')` and verifies with `password_verify`; its built-in
+> `OPNsense\Auth\API::createKey('root')` mints a correct pair and returns the
+> plaintext — run it from an SSH shell with a 6-line PHP script. Put the VM on a
+> libvirt net matching its default LAN (192.168.1.0/24, host as .254) so the KVM
+> host reaches 192.168.1.1 directly.
+
+Not covered: the **pfSense** half (needs the pfSense REST API package on a real
+pfSense), and OPNsense alias/NAT/gateway *write* paths beyond the rule toggle.
+
+---
+
+## pfSense half — still mock-only
+
+`firewall-aiops`'s pfSense path is exercised by a **mock-only** test suite (`uv run
+pytest`, no real firewall). It has **not** yet been validated against a live pfSense
+box. This document says exactly what the mock suite already guarantees, and what a
+live run has to prove before anyone may describe that half as verified against
 real hardware.
 
 It is deliberately checklist-shaped so the result is reproducible and auditable — not

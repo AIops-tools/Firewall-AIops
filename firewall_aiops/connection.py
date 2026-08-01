@@ -88,7 +88,13 @@ class FirewallConnection:
 
     @staticmethod
     def _build_headers(target: TargetConfig) -> dict[str, str]:
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        # Only ``Accept`` is a safe default. Do NOT set a global
+        # ``Content-Type: application/json``: OPNsense json-decodes the request
+        # body whenever that header is present, so a bodyless GET (every read)
+        # fails with ``400 "Invalid JSON syntax"`` against a real firewall.
+        # httpx adds the correct Content-Type per-request when a call passes
+        # ``json=`` (i.e. exactly the POST/PUT writes that carry a body).
+        headers = {"Accept": "application/json"}
         platform = target.platform_obj
         if not platform.uses_basic_auth:
             headers[platform.api_key_header] = target.secret

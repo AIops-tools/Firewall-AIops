@@ -139,6 +139,19 @@ def test_pfsense_header_key_and_no_basic(monkeypatch):
     assert headers["Accept"] == "application/json"
 
 
+@pytest.mark.unit
+def test_no_global_content_type_header(monkeypatch):
+    """Regression (live-found on real OPNsense 26.7, 2026-08-01): a global
+    Content-Type: application/json makes OPNsense json-decode the empty body of
+    every bodyless GET, failing with 400 "Invalid JSON syntax". httpx sets the
+    header per-request when a call passes json=, so it must NOT be a default."""
+    monkeypatch.setenv("FIREWALL_FW_SECRET", "s")
+    for plat in (OPNSENSE, PFSENSE):
+        target = TargetConfig(name="fw", platform=plat, host="h", username="k")
+        headers = FirewallConnection._build_headers(target)
+        assert "Content-Type" not in headers, f"{plat}: no default Content-Type"
+
+
 # ── ConnectionManager lifecycle ──────────────────────────────────────────────
 
 
