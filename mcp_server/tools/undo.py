@@ -22,8 +22,22 @@ from mcp_server._shared import mcp, tool_errors
 
 
 def _resolve_tool(name: str) -> Any:
-    """Return the governed callable registered under ``name`` (or None)."""
+    """Return the governed callable registered under ``name`` (or None).
+
+    The CLI reaches this through ``undo apply``, whose process only imports
+    ``mcp_server.tools.undo`` — every other tool module is imported lazily inside
+    its own CLI command and so is absent here. Without forcing a full load,
+    ``undo_apply`` would fail with "inverse tool not registered" for every write
+    tool when driven from the CLI (the MCP entry point loads all modules, so it
+    never hit this). If the first lookup misses, import ``mcp_server.server`` —
+    which registers every ``@mcp.tool()`` as an import side effect — and retry.
+    Imported lazily to avoid the undo↔server cycle.
+    """
     tool = mcp._tool_manager._tools.get(name)
+    if tool is None:
+        import mcp_server.server  # noqa: F401 — registers all tools as a side effect
+
+        tool = mcp._tool_manager._tools.get(name)
     return getattr(tool, "fn", None) if tool else None
 
 

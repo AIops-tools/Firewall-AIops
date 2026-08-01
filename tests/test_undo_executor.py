@@ -168,3 +168,40 @@ def test_undo_apply_audits_both_wrapper_and_inverse(gov_home):
         conn.close()
     assert "undo_apply" in tools
     assert "_undo_probe" in tools
+
+
+@pytest.mark.unit
+def test_resolve_tool_loads_full_registry_under_cli_only_import():
+    """Regression (live-found 2026-07-31): CLI ``undo apply`` runs in a process
+    that imports only ``mcp_server.tools.undo`` — every write tool is imported
+    lazily inside its own CLI command, so the inverse was "not registered" and
+    CLI-initiated undo failed for every write tool. ``_resolve_tool`` must force
+    a full server load on a miss.
+
+    Reproduced in a FRESH interpreter, because this pytest process has already
+    imported the whole server, which would mask the bug.
+    """
+    import subprocess
+    import sys
+    import textwrap
+
+    script = textwrap.dedent(
+        """
+        from mcp_server._shared import mcp
+        import mcp_server.tools.undo as u
+        before = set(mcp._tool_manager._tools)
+        # A miss must trigger the full-registry load, not just return None.
+        u._resolve_tool("__definitely_not_a_tool__")
+        after = set(mcp._tool_manager._tools)
+        new = after - before
+        assert new, "fallback loaded no additional tools"
+        sample = sorted(new)[0]
+        assert u._resolve_tool(sample) is not None, sample
+        print("OK", len(before), len(after))
+        """
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.startswith("OK"), r.stdout
