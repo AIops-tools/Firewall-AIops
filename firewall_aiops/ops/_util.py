@@ -97,8 +97,10 @@ def as_int(value: Any) -> int:
     Companion to :func:`num` for integral quantities (rule evaluations, packet
     and byte counters) so they never render as ``202.0``.
     """
-    if isinstance(value, bool):
+    if isinstance(value, bool):  # bool subclasses int; not a quantity
         return 0
+    if isinstance(value, int):
+        return value  # already exact — never round-trip through float64
     try:
         return int(float(value))
     except (TypeError, ValueError):
