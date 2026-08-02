@@ -382,8 +382,16 @@ def _finalize(state: _CallState) -> None:
     # compliance exception reports are built from this status. 'unknown' is a
     # distinct verdict, not a softer 'error': the request may have taken effect,
     # so the row must not assert a failure the tool cannot actually vouch for.
-    if state.status == "ok" and isinstance(state.result, dict) and state.result.get("error"):
-        state.status = "unknown" if is_unknown(state.result) else "error"
+    if state.status == "ok" and isinstance(state.result, dict):
+        # is_unknown is checked FIRST and independently of ``error``. A write
+        # can be undetermined while looking perfectly successful — a Proxmox
+        # task that has not finished yet returns a normal payload — and gating
+        # this on ``error`` audited those as 'ok', re-creating the very lie the
+        # unknown verdict exists to prevent.
+        if is_unknown(state.result):
+            state.status = "unknown"
+        elif state.result.get("error"):
+            state.status = "error"
 
     duration = int((time.time() - state.start) * 1000)
 
