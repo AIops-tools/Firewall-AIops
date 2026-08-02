@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — 2026-08-02
+
+### Changed (BREAKING)
+- **Requires MCP SDK 2.0** (`mcp[cli]>=2.0,<3.0`). `mcp.server.fastmcp` no longer exists in 2.0; the server is now built with `MCPServer` and reports its package version in the stdio handshake.
+
+### Fixed
+- **`undo apply` works from the CLI.** Every write tool is imported lazily inside its own CLI command, so a CLI-driven undo ran in a process where the inverse tool was never registered and failed with "inverse tool is not registered" — for every write tool. Only the MCP entry point, which imports the whole server, worked. Found while live-verifying against a real cluster.
+- **An undetermined outcome is audited `unknown`, not `ok`.** The harness only classified a result as undetermined when the payload *also* carried an `error` key, so a write that looked successful but had not been confirmed was recorded as a success.
+- **Every read failed against a real OPNsense.** A global `Content-Type: application/json` header made OPNsense json-decode the request body of bodyless GETs, so each one returned `400 Invalid JSON syntax`. Live-verified against OPNsense 26.7. Only `Accept` is sent by default now; httpx adds the content type per request for calls that actually carry a body.
+- The system version was read from the wrong level and came back null on every appliance; it now reads the nested `product` object.
+- Rule evaluation, packet and byte counters render as integers rather than floats.
+- **`as_int` no longer round-trips integers through float64** (see the line-wide sweep note in the sibling tools); the bool guard precedes the int short-circuit because `bool` subclasses `int`.
+
+
 ## v0.6.0 — 2026-07-21
 
 ### Changed (BREAKING)
