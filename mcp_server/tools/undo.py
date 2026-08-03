@@ -87,6 +87,32 @@ def undo_list(limit: int = 50, target: Optional[str] = None) -> dict:
     }
 
 
+def _origin_target(rec: dict) -> Optional[str]:
+    """The target the ORIGINAL write ran against, read from its recorded params.
+
+    Without this the replay goes to whatever target the caller names — in
+    practice the config's first entry — so on a multi-target config the inverse
+    runs against the wrong host. It only *looks* harmless because the resource
+    usually does not exist there; when two hosts both hold a resource with the
+    same name the inverse succeeds on the wrong one, silently.
+
+    Caught live on 2026-08-03 in container-host-aiops: a ``stop_container``
+    recorded against a Podman target replayed against a Portainer target.
+
+    A ``target`` in ``orig_params`` also means the original call accepted one,
+    so the fallback cannot hand a keyword to a tool that has no such parameter.
+    """
+    raw = rec.get("orig_params") or ""
+    try:
+        orig = json.loads(raw) if raw else {}
+    except (ValueError, TypeError):
+        return None  # unreadable: fall back to the caller/default, as before
+    if not isinstance(orig, dict):
+        return None
+    value = orig.get("target")
+    return value if isinstance(value, str) and value else None
+
+
 @mcp.tool()
 @governed_tool(risk_level="medium")
 @tool_errors("dict")
@@ -150,8 +176,10 @@ def undo_apply(undo_id: str, dry_run: bool = False, target: Optional[str] = None
         }
 
     call_params = dict(params)
-    if target is not None and "target" not in call_params:
-        call_params["target"] = target
+    if "target" not in call_params:
+        chosen = target if target is not None else _origin_target(rec)
+        if chosen is not None:
+            call_params["target"] = chosen
     result = fn(**call_params)
 
     # Only mark applied when the inverse did not itself return an error dict.

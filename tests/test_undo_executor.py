@@ -21,18 +21,21 @@ from mcp_server._shared import mcp
 from mcp_server.tools import undo as gov
 
 _CALLS: list[dict] = []
+_TARGETS: list = []
 
 
 @governed_tool(risk_level="low")
 def _undo_probe(value: str = "", target=None) -> dict:
     """Synthetic inverse target used only by the undo-executor tests."""
     _CALLS.append({"value": value})
+    _TARGETS.append(target)
     return {"ok": True, "value": value}
 
 
 @pytest.fixture
 def gov_home(tmp_path, monkeypatch):
     _CALLS.clear()
+    _TARGETS.clear()
     # Register the probe only for the duration of these tests so it never
     # pollutes the real tool registry (which exact-count smoke tests assert on).
     mcp.add_tool(_undo_probe, name="_undo_probe")
@@ -75,6 +78,52 @@ def test_undo_apply_dispatches_inverse_and_marks_applied(gov_home):
     # the token is consumed (single-use)
     assert undo_mod.get_undo_store().get(uid)["status"] == "applied"
     assert uid not in {u["undoId"] for u in gov.undo_list()["undos"]}
+
+
+@pytest.mark.unit
+def test_undo_apply_replays_against_the_target_the_write_ran_on(gov_home):
+    """A replay must go to the host the original write went to.
+
+    Without this the inverse ran against whatever target the caller named — in
+    practice the config's first entry — so on a multi-target config it hit the
+    wrong host. It only looked harmless because the resource usually does not
+    exist there; two hosts holding the same name and the inverse succeeds on the
+    wrong one, silently. Caught live on 2026-08-03 in container-host-aiops: a
+    stop recorded against a Podman target replayed against a Portainer target.
+    """
+    uid = undo_mod.get_undo_store().record(
+        skill="probe",
+        tool="orig_op",
+        undo_descriptor={"tool": "_undo_probe", "params": {"value": "v1"}},
+        orig_params={"value": "v1", "target": "second-host"},
+    )
+    result = gov.undo_apply(undo_id=uid)
+    assert result["applied"] is True
+    assert _TARGETS == ["second-host"]
+
+
+@pytest.mark.unit
+def test_undo_apply_prefers_an_explicit_caller_target(gov_home):
+    """An explicitly named target still wins — the fallback is only a default."""
+    uid = undo_mod.get_undo_store().record(
+        skill="probe",
+        tool="orig_op",
+        undo_descriptor={"tool": "_undo_probe", "params": {"value": "v1"}},
+        orig_params={"value": "v1", "target": "second-host"},
+    )
+    gov.undo_apply(undo_id=uid, target="chosen-host")
+    assert _TARGETS == ["chosen-host"]
+
+
+@pytest.mark.unit
+def test_undo_apply_survives_unreadable_orig_params(gov_home):
+    """Corrupt orig_params must not break the replay — just lose the fallback."""
+    uid = _record(params={"value": "v1"})
+    with sqlite3.connect(gov_home / "undo.db") as db:
+        db.execute("UPDATE undo_log SET orig_params = ? WHERE undo_id = ?",
+                   ("{not json", uid))
+    assert gov.undo_apply(undo_id=uid)["applied"] is True
+    assert _TARGETS == [None]
 
 
 @pytest.mark.unit
