@@ -104,17 +104,22 @@ def checked(result: Any) -> Any:
     if not isinstance(result, dict):
         return result
     error = result.get("error")
+    # ``outcomeUnknown`` is judged BEFORE ``error``, matching the harness: a
+    # write whose response was lost carries BOTH keys, and it is audited
+    # `unknown` precisely because it may have taken effect. Reporting that as a
+    # plain failure would tell a script the change did not happen and invite the
+    # double-apply the payload's own note warns about.
+    if result.get("outcomeUnknown"):
+        console.print(
+            f"[yellow]Outcome undetermined: {result.get('note') or ''}[/]"
+        )
+        raise typer.Exit(EXIT_UNDETERMINED)
     if error:
         console.print(f"[red]Error: {error}[/]")
         hint = result.get("hint")
         if hint:
             console.print(f"[dim]{hint}[/]")
         raise typer.Exit(1)
-    if result.get("outcomeUnknown"):
-        console.print(
-            f"[yellow]Outcome undetermined: {result.get('note') or ''}[/]"
-        )
-        raise typer.Exit(EXIT_UNDETERMINED)
     return result
 
 

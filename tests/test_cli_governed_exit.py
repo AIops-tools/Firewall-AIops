@@ -145,3 +145,23 @@ def test_every_cli_governed_write_result_is_checked():
         "these CLI call sites print a governed write's result without routing it "
         f"through {sorted(checkers)}, so a refusal exits 0: {unchecked}"
     )
+
+@pytest.mark.unit
+def test_undetermined_outcome_beats_error_and_is_not_a_plain_failure():
+    """A lost response carries BOTH keys — it must exit 2, not 1.
+
+    ``@tool_errors`` flattens the exception into ``{"error": ...}`` and, when
+    the failure is one where the write may still have landed, also sets
+    ``outcomeUnknown``. The harness deliberately judges unknown *before* error
+    when writing the audit row, for the reason its own note gives: the change
+    may have taken effect, so a blind retry could apply it twice. The CLI has to
+    agree, or the audit says "may have taken effect" while the exit status tells
+    a script it did not happen.
+    """
+    with pytest.raises(typer.Exit) as exc:
+        checked({
+            "error": "connection reset while awaiting the response",
+            "outcomeUnknown": True,
+            "note": "may have taken effect",
+        })
+    assert exc.value.exit_code == 2
