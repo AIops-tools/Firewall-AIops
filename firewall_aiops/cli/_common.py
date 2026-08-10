@@ -76,6 +76,48 @@ def dry_run_print(*, operation: str, api_call: str, parameters: dict | None = No
     console.print("[magenta]  Run without --dry-run to execute.[/]\n")
 
 
+#: Exit status for a write whose outcome could not be determined. Kept distinct
+#: from 0 (confirmed) and 1 (failed) on purpose: a write whose response was lost
+#: is not a failure, but it is emphatically not a success either, and a script
+#: must be able to tell all three apart.
+EXIT_UNDETERMINED = 2
+
+
+def checked(result: Any) -> Any:
+    """Return ``result``, or abort when it reports a failed/undetermined write.
+
+    Every CLI command that calls a governed twin MUST pass the result through
+    here before printing its success line.
+
+    Governed twins are wrapped in ``@tool_errors``, which flattens any exception
+    into ``{"error": ...}`` and **returns** it. The CLI therefore never sees the
+    exception, so a command that prints its result unconditionally reports a
+    refused or failed operation exactly like a successful one — and exits 0, so
+    a script cannot tell either. The dry-run path already refused with a
+    non-zero status, which made the asymmetry worse: the preview was stricter
+    than the real call.
+
+    ``outcomeUnknown`` (set by the harness when a write's response is lost) is
+    neither success nor failure — the change may still have landed. It gets its
+    own line and :data:`EXIT_UNDETERMINED`, never a silent success.
+    """
+    if not isinstance(result, dict):
+        return result
+    error = result.get("error")
+    if error:
+        console.print(f"[red]Error: {error}[/]")
+        hint = result.get("hint")
+        if hint:
+            console.print(f"[dim]{hint}[/]")
+        raise typer.Exit(1)
+    if result.get("outcomeUnknown"):
+        console.print(
+            f"[yellow]Outcome undetermined: {result.get('note') or ''}[/]"
+        )
+        raise typer.Exit(EXIT_UNDETERMINED)
+    return result
+
+
 def dry_run_preview(
     preview: Any, *, operation: str, api_call: str, parameters: dict | None = None
 ) -> None:
