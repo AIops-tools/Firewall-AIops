@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "firewall-aiops": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "firewall-aiops==0.9.0",
+        "firewall-aiops-mcp"
+      ]
+    }
+  }
+}

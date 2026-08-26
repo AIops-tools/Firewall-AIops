@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Installable as a Claude Code plugin.** `.claude-plugin/plugin.json` plus a
+  root `.mcp.json` make this repo a plugin, so `/plugin install firewall-aiops@aiops-tools`
+  delivers the skill and registers the MCP server in one step. The server is
+  pinned to the exact package version the manifest declares, so an audit row
+  stays traceable to the code that produced it. Nothing about the tool itself
+  changed — the CLI and the standalone MCP server work exactly as before.
+
 ## v0.9.0 — 2026-08-10
 
 ### Fixed
