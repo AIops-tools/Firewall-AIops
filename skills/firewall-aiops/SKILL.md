@@ -10,7 +10,7 @@ description: >
   Use this skill whenever the user needs to operate an OPNsense or pfSense firewall — a one-shot overview, firmware/health, interfaces and gateways, firewall rules with hit-counts and shadow analysis, NAT (port-forward/outbound/1:1), aliases and their entries, VPN (WireGuard/OpenVPN/IPsec), DHCP leases and static mappings, the firewall log and state table, three flagship RCAs (gateway health, rule hit/shadow, blocked traffic), and governed writes (toggle a rule, add/remove an alias entry, kill states, restart a service, apply/reconfigure to make edits live, reboot).
   Always use this skill for "OPNsense", "pfSense", "firewall rule", "port forward", "NAT", "alias", "WireGuard", "OpenVPN", "IPsec", "DHCP lease", "firewall log", "blocked traffic", "why is my WAN down", "gateway loss/latency", "unused / shadowed rules", "apply firewall changes", "reboot the firewall" when the context is an OPNsense/pfSense firewall.
   Do NOT use when the target is something other than an OPNsense/pfSense firewall (a hypervisor, storage appliance, backup product, container-orchestration cluster, multi-vendor router/switch config, or OT/industrial equipment) — route those to the appropriate other AIops-tools skill. Cloud security groups and vendor firewall appliances are out of scope.
-  Governed firewall operations with a built-in governance harness (audit, policy, token budget, undo, risk-tiers). Behaviour is validated by a mock-based test suite; see docs/VERIFICATION.md for the live-verification checklist.
+  Governed firewall operations with a built-in governance harness (audit, policy, token budget, undo, risk-tiers). Live-verified against real OPNsense 26.7 and pfSense CE 2.7.2 on top of the mock test suite; see docs/VERIFICATION.md for exactly what each run proved and what is still untested.
 installer:
   kind: uv
   package: firewall-aiops
@@ -42,9 +42,10 @@ OPNsense API secret / pfSense API key is stored **encrypted**
 (`~/.firewall-aiops/secrets.enc`, Fernet + scrypt) — never plaintext on disk.
 
 > **Standalone**: the governance harness is bundled in the package
-> (`firewall_aiops.governance`) — no external skill-family dependency. Behaviour is
-> covered by a mock-based test suite; `docs/VERIFICATION.md` is the checklist for a
-> live run against a real firewall (both platforms are free/self-hostable).
+> (`firewall_aiops.governance`) — no external skill-family dependency. Both platform
+> halves have been exercised against real firewalls (OPNsense 26.7, pfSense CE 2.7.2)
+> in addition to the mock suite; `docs/VERIFICATION.md` records what each live run
+> proved, and what remains untested on each platform.
 
 ## What This Skill Does
 

@@ -153,3 +153,61 @@ def test_path_traversal_ids_are_url_encoded():
     pf = get_platform(PFSENSE)
     path = pf.path("alias_uuid", name="x&admin=1?y=../z")
     assert "../" not in path and "&admin" not in path
+
+
+# ── endpoints proven absent on a live pfSense ────────────────────────────────
+
+
+@pytest.mark.unit
+def test_pfsense_registry_avoids_endpoints_no_pfsense_serves():
+    """These paths 404 on a real pfSense and are in NO published API schema.
+
+    They shipped for months, so the whole VPN status surface, the whole state
+    table (including the ``kill_states`` write) and service restart never worked
+    on pfSense — each failure surfacing as "that subsystem is not installed"
+    rather than "this tool is calling a URL that does not exist". Checked live
+    against pfSense CE 2.7.2 + pfSense-pkg-RESTAPI 2.4_3, and cross-checked
+    against the package's own OpenAPI schema at both 2.4.3 and 2.10.2.
+
+    The assertion is structural rather than a list of the current values, so a
+    future edit that reaches for one of these names fails here instead of in
+    somebody's firewall.
+    """
+    never_served = {
+        "/api/v2/diagnostics/states",
+        "/api/v2/status/wireguard",
+        "/api/v2/status/openvpn",
+        "/api/v2/status/ipsec",
+        "/api/v2/services/{service}/restart",
+    }
+    offenders = {
+        key: template
+        for key, template in get_platform(PFSENSE).paths.items()
+        if template.split("?")[0] in never_served
+    }
+    assert not offenders, f"pfSense path registry uses non-existent endpoints: {offenders}"
+
+
+@pytest.mark.unit
+def test_pfsense_singular_objects_are_never_addressed_by_name():
+    """pfSense answers ``MODEL_REQUIRES_ID`` to a singular URL filtered by name.
+
+    Filtering belongs on the *plural* endpoint (``/aliases?name=x``), which does
+    honour it. A singular path carrying ``{name}`` can therefore never succeed.
+    """
+    # Named explicitly rather than guessed from the URL: "alias" is singular and
+    # ends in "s", so any plural-by-suffix heuristic passes it and the check
+    # silently tests nothing. A singular endpoint may be selected by ``id`` (that
+    # is what pfSense asks for) but never by ``name``.
+    singular_requiring_id = {
+        "/api/v2/firewall/alias",
+        "/api/v2/firewall/rule",
+        "/api/v2/status/service",
+        "/api/v2/services/dhcp_server/static_mapping",
+    }
+    by_name = {
+        key: template
+        for key, template in get_platform(PFSENSE).paths.items()
+        if template.split("?")[0] in singular_requiring_id and "name=" in template
+    }
+    assert not by_name, f"singular pfSense paths filtered by name always 400: {by_name}"

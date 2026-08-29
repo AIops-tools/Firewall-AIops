@@ -41,12 +41,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.governance import capture_prior_state
+from firewall_aiops.connection import FirewallApiError
+from firewall_aiops.governance import capture_prior_state, mark_unknown
+from firewall_aiops.ops import _pfsense, lockout
 from firewall_aiops.ops import aliases as alias_ops
-from firewall_aiops.ops import lockout
 from firewall_aiops.ops import pending as pending_ops
 from firewall_aiops.ops import rules as rule_ops
-from firewall_aiops.ops._util import s
+from firewall_aiops.ops._util import pick, s
 from firewall_aiops.platform import OPNSENSE
 
 # kill_states flushes the pf state table, which includes the state entry for the
@@ -149,6 +150,40 @@ def _capture_alias(conn: Any, name: str) -> list[str]:
     return out.get("entries", []) if isinstance(out, dict) else []
 
 
+def _pfsense_alias_members(conn: Any, name: str) -> tuple[int, list[str]]:
+    """Resolve a pfSense alias to its numeric id and its CURRENT member list.
+
+    The member list is read off the alias record itself, never from the
+    best-effort ``_capture_alias`` snapshot. pfSense has no append/remove verb —
+    a member change is a PATCH of the whole ``address`` list — so a snapshot that
+    silently came back empty (it swallows read failures by design, for audit
+    purposes) would be written back as the alias' entire contents and delete
+    every other member. The list about to be overwritten has to be the one the
+    firewall currently holds, or the write must not happen at all.
+    """
+    record = _pfsense.resolve_by_name(conn, "alias_uuid", name, name=s(name, 64))
+    members = pick(record, "address")
+    if not isinstance(members, list):
+        raise ValueError(
+            f"pfSense returned alias {s(name, 64)!r} without a readable member list "
+            f"(got {type(members).__name__}); refusing to overwrite it with a guess."
+        )
+    return _pfsense.object_id(record), [s(m, 128) for m in members]
+
+
+def _pfsense_write_alias_members(conn: Any, alias_id: int, members: list[str]) -> None:
+    """PATCH an alias' whole member list.
+
+    POSTing the alias again is a *create* and a real pfSense answers
+    ``FIELD_MUST_BE_UNIQUE``; DELETE needs the numeric id and rejects a
+    name-only body. Both verified live against CE 2.7.2.
+    """
+    conn.patch(
+        conn.platform.path("alias_add"),
+        json={"id": alias_id, "address": list(members)},
+    )
+
+
 def add_alias_entry(conn: Any, name: str, entry: str) -> dict:
     """[WRITE][med] Add one entry to an alias, capturing prior entries. Undo: remove."""
     prior = _capture_alias(conn, name)
@@ -156,7 +191,8 @@ def add_alias_entry(conn: Any, name: str, entry: str) -> dict:
     if _is_opnsense(conn):
         conn.post(conn.platform.path("alias_add", name=s(name, 64)), json={"address": entry})
     else:
-        conn.post(conn.platform.path("alias_add"), json={"name": name, "address": [entry]})
+        alias_id, members = _pfsense_alias_members(conn, name)
+        _pfsense_write_alias_members(conn, alias_id, [*members, s(entry, 128)])
     return {
         "action": "add_alias_entry",
         "alias": s(name),
@@ -172,7 +208,11 @@ def remove_alias_entry(conn: Any, name: str, entry: str) -> dict:
     if _is_opnsense(conn):
         conn.post(conn.platform.path("alias_delete", name=s(name, 64)), json={"address": entry})
     else:
-        conn.delete(conn.platform.path("alias_delete"), json={"name": name, "address": [entry]})
+        wanted = s(entry, 128)
+        alias_id, members = _pfsense_alias_members(conn, name)
+        _pfsense_write_alias_members(
+            conn, alias_id, [m for m in members if m != wanted]
+        )
     return {
         "action": "remove_alias_entry",
         "alias": s(name),
@@ -279,15 +319,40 @@ def kill_states(conn: Any, filter_ip: str = "") -> dict:
     response to this very call can be lost. That is a lost response, not a
     lockout — see :data:`KILL_STATES_SESSION_NOTE`.
     """
-    payload = {"filter": s(filter_ip, 64)} if filter_ip else {}
-    path = conn.platform.path("kill_states")
-    if _is_opnsense(conn):
-        conn.post(path, json=payload)
-    else:
-        conn.delete(path, json=payload or None)
+    wanted = s(filter_ip, 64)
+    try:
+        if _is_opnsense(conn):
+            conn.post(
+                conn.platform.path("kill_states"), json={"filter": wanted} if wanted else {}
+            )
+        else:
+            # pfSense selects the states to drop with query parameters, not a body.
+            path = (
+                conn.platform.path("kill_states_filtered", filter=wanted)
+                if wanted
+                else conn.platform.path("kill_states")
+            )
+            conn.delete(path)
+    except FirewallApiError as exc:
+        if exc.status_code is not None:
+            raise  # the firewall answered and refused — a real failure
+        # No response at all is the EXPECTED outcome here, not a failure: the
+        # flush drops the state entry for this very connection, so the reply to
+        # the request that performed it has nowhere to go. The request reached
+        # the firewall, so the flush has most likely happened — which is exactly
+        # what "undetermined" means. Calling it an error would put a change that
+        # did occur into the audit trail as one that did not.
+        return mark_unknown(
+            {
+                "action": "kill_states",
+                "filter": wanted or "all",
+                "error": s(exc, 300),
+                "sessionImpact": KILL_STATES_SESSION_NOTE,
+            }
+        )
     return {
         "action": "kill_states",
-        "filter": s(filter_ip, 64) or "all",
+        "filter": wanted or "all",
         "note": KILL_STATES_SESSION_NOTE,
     }
 
@@ -304,7 +369,16 @@ def restart_service(conn: Any, service: str) -> dict:
     exact: an unrecognised service name is never blocked on a guess.
     """
     guard_restart_service(conn, service)
-    conn.post(conn.platform.path("service_restart", service=s(service, 32)))
+    if _is_opnsense(conn):
+        conn.post(conn.platform.path("service_restart", service=s(service, 32)))
+    else:
+        record = _pfsense.resolve_by_name(
+            conn, "services_list", service, service=s(service, 32)
+        )
+        conn.post(
+            conn.platform.path("service_restart"),
+            json={"id": _pfsense.object_id(record), "action": "restart"},
+        )
     return {"action": "restart_service", "service": s(service, 32)}
 
 

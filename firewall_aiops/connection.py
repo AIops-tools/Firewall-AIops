@@ -50,8 +50,11 @@ def _teaching_message(status: int, path: str, body: str, label: str) -> str:
         )
     if status == 404:
         return (
-            f"Resource not found (404) on {label} {path}. The id/name may be "
-            f"stale — list the parent collection first to get a current one. {snippet}"
+            f"Resource not found (404) on {label} {path}. Either the id/name is "
+            f"stale — list the parent collection first to get a current one — or "
+            f"this build does not serve that endpoint at all (pfSense surfaces "
+            f"come and go with the pfSense-pkg-RESTAPI version). A collection URL "
+            f"with no id in it points at the second case. {snippet}"
         )
     if status == 400:
         return (

@@ -57,7 +57,12 @@ def _extract_entries(conn: Any, raw: Any) -> list[str]:
     pfSense returns the alias record with an ``address`` list under ``data``.
     """
     obj = as_obj(raw)
-    inner = as_obj(pick(obj, "data")) or obj
+    data = pick(obj, "data")
+    # pfSense is queried through the *plural* endpoint filtered by name (the
+    # singular one requires a numeric id), so ``data`` is a one-element list.
+    if isinstance(data, list):
+        data = next((row for row in data if isinstance(row, dict)), None)
+    inner = as_obj(data) or obj
     address = pick(inner, "address", "content", "entries")
     if isinstance(address, list):
         return [s(a, 128) for a in address if a]

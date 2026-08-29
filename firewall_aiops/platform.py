@@ -234,33 +234,44 @@ _PFSENSE_PATHS = {
     "rule_get": "/api/v2/firewall/rule?id={uuid}",
     "rule_toggle": "/api/v2/firewall/rule",
     "rule_stats": "/api/v2/firewall/rules",
-    "rule_states": "/api/v2/diagnostics/states",
+    "rule_states": "/api/v2/firewall/states",
     # nat
     "nat_port_forward": "/api/v2/firewall/nat/port_forwards",
     "nat_outbound": "/api/v2/firewall/nat/outbound/mappings",
     "nat_one_to_one": "/api/v2/firewall/nat/one_to_one/mappings",
     # aliases
     "aliases_search": "/api/v2/firewall/aliases",
-    "alias_uuid": "/api/v2/firewall/alias?name={name}",
-    "alias_entries": "/api/v2/firewall/alias?name={name}",
+    "alias_uuid": "/api/v2/firewall/aliases?name={name}",
+    "alias_entries": "/api/v2/firewall/aliases?name={name}",
     "alias_add": "/api/v2/firewall/alias",
     "alias_delete": "/api/v2/firewall/alias",
     # vpn
-    "wireguard": "/api/v2/status/wireguard",
-    "openvpn": "/api/v2/status/openvpn",
-    "ipsec": "/api/v2/status/ipsec",
+    "wireguard": "/api/v2/status/wireguard/peers",
+    "openvpn": "/api/v2/status/openvpn/clients",
+    "ipsec": "/api/v2/status/ipsec/sas",
     # dhcp
     "dhcp_leases": "/api/v2/status/dhcp_server/leases",
     "dhcp_static": "/api/v2/services/dhcp_server/static_mappings",
     # diag / traffic
     "firewall_log": "/api/v2/status/logs/firewall",
-    "states": "/api/v2/diagnostics/states",
-    "kill_states": "/api/v2/diagnostics/states",
-    "top_talkers": "/api/v2/diagnostics/states",
+    "states": "/api/v2/firewall/states",
+    # pfSense refuses an unfiltered mass delete (MODEL_DELETE_MANY_REQUIRES_QUERY_
+    # PARAMS), so "flush everything" has to be spelled as a filter that matches
+    # everything. It must be a real field filter: a made-up parameter such as
+    # ?all=true satisfies the "at least one query parameter" check and then
+    # matches nothing, returning 200 with an empty data list — success reported
+    # for a flush that never happened. Verified live on 2.7.2.
+    "kill_states": "/api/v2/firewall/states?id__gte=0",
+    "kill_states_filtered": "/api/v2/firewall/states?source__contains={filter}",
+    "top_talkers": "/api/v2/firewall/states",
     # writes / apply
     "apply": "/api/v2/firewall/apply",
     "reconfigure": "/api/v2/firewall/apply",
-    "service_restart": "/api/v2/services/{service}/restart",
+    # Restarting is a two-step on pfSense: resolve the service's numeric id
+    # via ``services_list``, then POST {id, action}. The API rejects a
+    # name-only body with MODEL_REQUIRES_ID (verified live, 2.7.2 + RESTAPI 2.4.3).
+    "services_list": "/api/v2/status/services?name={service}",
+    "service_restart": "/api/v2/status/service",
     "reboot": "/api/v2/diagnostics/reboot",
 }
 

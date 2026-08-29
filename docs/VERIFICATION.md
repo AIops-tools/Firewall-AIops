@@ -32,23 +32,93 @@ CLI write and undo audited.
 > libvirt net matching its default LAN (192.168.1.0/24, host as .254) so the KVM
 > host reaches 192.168.1.1 directly.
 
-Not covered: the **pfSense** half (needs the pfSense REST API package on a real
-pfSense), and OPNsense alias/NAT/gateway *write* paths beyond the rule toggle.
+Not covered on the OPNsense side: alias/NAT/gateway *write* paths beyond the rule
+toggle. The **pfSense** half is now live-verified too — see the next section.
 
 ---
 
-## pfSense half — still mock-only
+## ✅ pfSense half — live-verified against pfSense CE 2.7.2 (2026-08-29)
 
-`firewall-aiops`'s pfSense path is exercised by a **mock-only** test suite (`uv run
-pytest`, no real firewall). It has **not** yet been validated against a live pfSense
-box. This document says exactly what the mock suite already guarantees, and what a
-live run has to prove before anyone may describe that half as verified against
-real hardware.
+Verified against a real pfSense CE 2.7.2 with **pfSense-pkg-RESTAPI 2.4_3**, installed
+headless in a KVM lab from the *memstick-serial* image, driven through the real
+`X-API-Key` path. **Eleven of the 31 modeled endpoints could never have worked** —
+all fixed and regression-tested. This was the single largest defect count of any
+platform half in this product line.
 
-It is deliberately checklist-shaped so the result is reproducible and auditable — not
-a subjective "seems fine".
+### How the sweep was made trustworthy
 
-## What the mock suite already guarantees
+All 31 registry paths were probed against the live box **with a positive control**:
+three modeled paths that do answer `200` were probed in the same run, so a `404`
+means the endpoint is absent rather than the probe being broken. Every candidate
+absence was then checked against the package's own OpenAPI schema at **two**
+versions (2.4.3 and 2.10.2) to separate *fictional* from *version-gated* — a
+distinction the fix depends on.
+
+| result | count |
+|---|---|
+| answered `200` | 18 |
+| `404` — path in **no** published schema (fictional) | 8 keys / 5 paths |
+| `404` — exists only in newer pfSense-pkg-RESTAPI | 1 |
+| `400` on every call — singular endpoint filtered by name | 2 |
+| `405` on a GET probe of a POST-only path (correct) | 1 |
+
+### The fictional five
+
+`/api/v2/diagnostics/states` (behind `states_table`, `top_talkers`, `rule_states`
+and the **`kill_states` write**), `/api/v2/status/wireguard`,
+`/api/v2/status/openvpn`, `/api/v2/status/ipsec`, and
+`/api/v2/services/{service}/restart`.
+
+**Why nobody noticed:** every VPN/diagnostic read catches its own failure and
+returns `{"error": ...}`, which those functions' docstrings define as "that VPN
+subsystem is not installed/enabled". A URL that does not exist therefore looked
+exactly like a feature the operator had chosen not to turn on. That is bug class
+\#3 (a failure disguised as health) wearing bug class \#9 (a fabricated endpoint).
+
+### What was verified after the fix
+
+- **Reads**, all `200` with real data: `states_table` / `top_talkers`
+  (`/api/v2/firewall/states`), `openvpn_sessions`
+  (`/api/v2/status/openvpn/clients`), `ipsec_sas` (`/api/v2/status/ipsec/sas`),
+  `alias_entries` (plural `/api/v2/firewall/aliases?name=`).
+- **Full governed write loop**, twice: `add_alias_entry` → the alias on the
+  firewall carries the new member (checked through the API, not the tool's own
+  return) → audit row `ok` / tier `confirm` → `undo_apply` → the member is gone
+  from the firewall again, `effectVerified: true`. A second consecutive add
+  confirmed earlier members survive.
+- **`restart_service`**: resolves the numeric id via
+  `/api/v2/status/services?name=`, then `POST /api/v2/status/service` with
+  `{id, action}`. The self-lockout guard still refuses `nginx`, on the dry run too.
+- **`kill_states`**: the DELETE times out every time because it drops this
+  connection's own state entry — the audit row is now `unknown`, not `error`.
+  That "flush everything" needs a match-everything filter was established with a
+  **negative control**: a filter matching nothing answers `200` with an empty list
+  and the connection survives; `?id__gte=0` kills the connection mid-request.
+- **Counters**: `bytes` / `packets` are ints carrying real values (`packets` used
+  to be `0.0` on every row because pfSense calls the field `packets_total`).
+
+### Still not verified on pfSense
+
+`wireguard_status` and `dhcp_static_mappings` need a newer pfSense-pkg-RESTAPI
+than 2.4_3 (2.4_3 is the last build supporting CE 2.7.2, and CE 2.8.x is not on the
+public mirror). Both now fail with a 404 that names the path rather than implying
+the subsystem is absent. NAT, gateway and rule-toggle *writes* on pfSense, and
+`pending_changes` staged-config semantics, remain mock-only.
+
+> **Lab recipe.** The CE images are on `https://atxfiles.netgate.com/mirror/downloads/`
+> and download **anonymously** — no Netgate account, contrary to what this repo
+> previously assumed. Use the *memstick-serial* image with
+> `qemu -serial tcp:...,server,wait` (**`wait`**, not `nowait`: with `nowait` the VM
+> boots immediately and every byte before your client connects is lost). Do not send
+> arrow keys to `bsdinstall` over serial — a bare `ESC` reads as Cancel and the
+> trailing `[B` leaks into the next prompt; use the letter hotkeys (`a` cycles the
+> Auto entries, `f` fires Finish). Install the API package with
+> `pkg-static -C /dev/null add <the v2.4.3 pfSense-2.7.2-pkg-RESTAPI.pkg>`, mint a key
+> with `POST /api/v2/auth/key` under basic auth, then **`PATCH
+> /api/v2/system/restapi/settings` with `auth_methods:["KeyAuth","BasicAuth"]`** —
+> without that, every `X-API-Key` request is `401`.
+
+### What the mock suite guarantees on top of that
 
 - Every module imports; the CLI builds; **all 35 MCP tools** carry the
   `@governed_tool` harness marker (`tests/test_smoke.py`, which also asserts the tool

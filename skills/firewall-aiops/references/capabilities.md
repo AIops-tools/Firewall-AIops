@@ -24,7 +24,7 @@ tool name resolves to the right path on each firewall via the platform registry.
 | `list_rules` | `/api/firewall/filter/searchRule` | `/api/v2/firewall/rules` | filter rules normalized (uuid, enabled, action, if, src/dst, evaluations) |
 | `rule_detail` | `/api/firewall/filter/getRule/{uuid}` | `/api/v2/firewall/rule?id=` | one rule's full detail |
 | `rule_stats` | `/api/diagnostics/firewall/pfStatistics` | `/api/v2/firewall/rules` | per-rule hit counts / evaluations, busiest first |
-| `rule_states` | `/api/diagnostics/firewall/queryStates` | `/api/v2/diagnostics/states` | active state-table entries tied to rules |
+| `rule_states` | `/api/diagnostics/firewall/queryStates` | `/api/v2/firewall/states` | active state-table entries tied to rules |
 | `pending_changes` | (derived from `searchRule`) | (derived from `firewall/rules`) | the staged rule set `apply_changes` would commit + its lockout assessment |
 
 ## NAT (read)
@@ -80,7 +80,7 @@ tool name resolves to the right path on each firewall via the platform registry.
 | `toggle_rule` | **med** | OPNsense `toggleRule/{uuid}/{0\|1}`; pfSense PATCH `firewall/rule` | reads the rule first; records undo (restore prior enabled). Staged — run `apply_changes` |
 | `add_alias_entry` | **med** | OPNsense `alias_util/add/{name}`; pfSense `firewall/alias` | captures prior entries; undo removes the added entry |
 | `remove_alias_entry` | **med** | OPNsense `alias_util/delete/{name}`; pfSense `firewall/alias` | captures prior entries; undo adds it back |
-| `kill_states` | **med** | `diagnostics/…/killStates` / `diagnostics/states` | flush pf states (optionally one source IP) |
+| `kill_states` | **med** | `diagnostics/…/killStates` / `firewall/states` (DELETE, query-filtered) | flush pf states (optionally one source IP) |
 | `restart_service` | **med** | `service/restart/{service}` | restart a firewall service; **refuses** the daemon serving this appliance's own API |
 | `apply_changes` | **HIGH** | `filter/apply` / `firewall/apply` | commit staged config — makes edits live; `dry_run` returns the staged set; **refuses** a provable lockout (`override=True` to force); audited |
 | `reconfigure` | **HIGH** | `filter/savepoint` / `firewall/apply` | reload/commit a subsystem; `dry_run` + audited |
@@ -164,6 +164,16 @@ read cannot answer "would this be refused?", so reads are expected; the mutating
 POST/PATCH is the thing that must never happen. (`apply_changes`,
 `reconfigure`, `restart_service`, `kill_states` and `reboot` have no CLI command
 — they are MCP-only — so `rules toggle` is the whole CLI write surface.)
+
+### Two pfSense reads depend on the pfSense-pkg-RESTAPI version
+
+`wireguard_status` and `dhcp_static_mappings` read endpoints that newer
+pfSense-pkg-RESTAPI builds serve and older ones do not (`/api/v2/status/wireguard/peers`,
+`/api/v2/services/dhcp_server/static_mappings`). On a build that predates them the
+call returns a 404 error payload naming the exact path — it is not "WireGuard is
+not configured". Upgrade the package on the firewall to get those surfaces.
+Everything else in this table was exercised against pfSense CE 2.7.2 with
+pfSense-pkg-RESTAPI 2.4_3.
 
 ### `kill_states` is a lost response, not a lockout
 

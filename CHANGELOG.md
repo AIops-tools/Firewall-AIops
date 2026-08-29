@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+### Fixed
+- **Eleven of the 31 pfSense endpoints could never have worked, and five of them
+  are in no published pfSense API schema at all.** The first live run against a
+  real pfSense (CE 2.7.2 + pfSense-pkg-RESTAPI 2.4_3) found that the whole VPN
+  status surface (`wireguard_status`, `openvpn_sessions`, `ipsec_sas`), the whole
+  state table (`states_table`, `top_talkers`, `rule_states` **and the
+  `kill_states` write**), `restart_service`, `dhcp_static_mappings` and
+  alias-lookup-by-name answered 404 or 400 on every call. The reads were the more
+  dangerous half: each one catches its own failure and reports
+  `{"error": ...}`, which the docstrings define as "that subsystem is not
+  installed" — so a URL that does not exist was indistinguishable from a feature
+  the operator had not enabled. The real endpoints (`/api/v2/firewall/states`,
+  `/api/v2/status/openvpn/clients`, `/api/v2/status/ipsec/sas`,
+  `/api/v2/status/services`, and the plural `/api/v2/firewall/aliases?name=`) are
+  now used and were confirmed live, with three of the previously working paths as
+  a control so a 404 means "absent", not "broken probe". Two structural tests fail
+  if any of the five fictional paths is ever reached for again. OPNsense is
+  unaffected.
+- **Both pfSense alias writes were rejected by every real firewall.** Adding a
+  member POSTed the alias again — a *create*, answered with
+  `FIELD_MUST_BE_UNIQUE` — and removing one sent DELETE with a name in the body,
+  answered with `MODEL_REQUIRES_ID`. pfSense has no add/remove-member verb: an
+  alias is one object whose `address` **is** the list, so a member change is a
+  PATCH of the whole list against the object's numeric id. The list written back
+  is read from the alias record itself, never from the best-effort prior-state
+  snapshot — that snapshot returns `[]` when its read fails, and writing it back
+  would delete every other member of the alias.
+- **`restart_service` on pfSense addressed the service by name in the path.**
+  pfSense wants the service's numeric id in the body; a name-only request is
+  refused with `MODEL_REQUIRES_ID`. The id is now resolved first, and an unknown
+  service name fails loudly instead of issuing a request that cannot succeed.
+- **A lost `kill_states` response is recorded as undetermined, not as a failure.**
+  Flushing the state table drops the state entry for the very connection issuing
+  the flush, so the reply has nowhere to go — that is the expected outcome, and
+  the audit row previously called it `error` for a change that had almost
+  certainly happened. It now records `unknown` with `outcomeUnknown: true`. A
+  firewall that answers and refuses is still a real failure.
+- **pfSense refuses an unfiltered mass state delete**
+  (`MODEL_DELETE_MANY_REQUIRES_QUERY_PARAMS`), so "flush everything" is now spelled
+  as a filter that matches everything (`?id__gte=0`). A made-up parameter such as
+  `?all=true` satisfies that check and then matches nothing, answering 200 with an
+  empty list — success reported for a flush that never happened.
+- **State-table byte and packet counters rendered as floats, and packets were
+  always zero.** pfSense names them `bytes_total` / `packets_total`; the packet key
+  was not among those read, so every connection looked idle. Both are `as_int` now.
+- **A 404 no longer claims the id must be stale.** For a collection URL with no id
+  in it, the only possible cause is that the build does not serve that endpoint —
+  which is exactly the case this release fixes, and the old message pointed the
+  reader at the wrong thing.
+
 ### Added
 - **Installable as a Claude Code plugin.** `.claude-plugin/plugin.json` plus a
   root `.mcp.json` make this repo a plugin, so `/plugin install firewall-aiops@aiops-tools`

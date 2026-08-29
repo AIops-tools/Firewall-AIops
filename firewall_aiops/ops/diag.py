@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from firewall_aiops.ops._util import num, opt, pick, s
+from firewall_aiops.ops._util import as_int, opt, pick, s
 
 _ACTIONS = {"pass", "block", "rdr", "nat", "reject"}
 
@@ -97,8 +97,8 @@ def states_table(conn: Any, top: int = 100) -> dict:
                 "source": opt(pick(r, "src", "source", "src_addr")),
                 "destination": opt(pick(r, "dst", "destination", "dst_addr")),
                 "state": opt(pick(r, "state", "status")),
-                "bytes": num(pick(r, "bytes", "bytes_total", default=0)),
-                "packets": num(pick(r, "packets", "pkts", default=0)),
+                "bytes": as_int(pick(r, "bytes", "bytes_total", default=0)),
+                "packets": as_int(pick(r, "packets", "pkts", "packets_total", default=0)),
             }
             for r in rows
         ]
@@ -121,9 +121,9 @@ def top_talkers(conn: Any, top: int = 20) -> dict:
         agg: dict[str, dict] = {}
         for r in rows:
             src = opt(pick(r, "src", "source", "src_addr")) or "(unknown)"
-            bucket = agg.setdefault(src, {"source": src, "connections": 0, "bytes": 0.0})
+            bucket = agg.setdefault(src, {"source": src, "connections": 0, "bytes": 0})
             bucket["connections"] += 1
-            bucket["bytes"] += num(pick(r, "bytes", "bytes_total", default=0))
+            bucket["bytes"] += as_int(pick(r, "bytes", "bytes_total", default=0))
         talkers = sorted(agg.values(), key=lambda t: (t["bytes"], t["connections"]), reverse=True)
         want = max(1, int(top))
         return {
