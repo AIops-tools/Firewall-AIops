@@ -20,6 +20,11 @@ def _iface(value: Any) -> str | None:
     produced the literal ``"['lan']"`` — user-visible garbage, and it also made
     ``list_rules(interface="lan")`` match nothing at all, so filtering by
     interface returned an empty list that read as "no rules on that interface".
+
+    A rule can also sit on several interfaces at once (pfSense floating rules),
+    which is why the filter below matches *membership* rather than the whole
+    joined string — otherwise "wan,lan" would fail to match a request for "wan"
+    and the filter would keep silently dropping exactly those rules.
     """
     if isinstance(value, list):
         return opt(",".join(str(v) for v in value if v)) or None
@@ -77,7 +82,8 @@ def list_rules(conn: Any, interface: str | None = None) -> dict:
             # crashing on .lower().
             rules = [
                 r for r in rules
-                if r["interface"] is not None and r["interface"].lower() == want
+                if r["interface"] is not None
+                and want in [i.strip().lower() for i in r["interface"].split(",")]
             ]
         return {"total": len(rules), "rules": rules}
     except Exception as exc:  # noqa: BLE001 — report as partial

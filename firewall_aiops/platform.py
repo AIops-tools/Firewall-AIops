@@ -266,6 +266,12 @@ _PFSENSE_PATHS = {
     "top_talkers": "/api/v2/firewall/states",
     # writes / apply
     "apply": "/api/v2/firewall/apply",
+    # Same URL, but the GET is a documented *status read* ("Read pending
+    # firewall change status"). It is a separate key so it is only ever
+    # requested where a status read exists: OPNsense maps "apply" to an
+    # ACTION endpoint, and GETting that from a read path risks committing
+    # the config from inside a dry-run.
+    "apply_status": "/api/v2/firewall/apply",
     "reconfigure": "/api/v2/firewall/apply",
     # Restarting is a two-step on pfSense: resolve the service's numeric id
     # via ``services_list``, then POST {id, action}. The API rejects a

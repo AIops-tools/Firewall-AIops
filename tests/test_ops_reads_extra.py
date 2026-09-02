@@ -457,3 +457,64 @@ def test_rule_stats_does_not_fake_a_ranking_without_counters():
     assert out["hitCountersAvailable"] is False
     assert out["rules"][0]["evaluations"] is None
     assert "no per-rule hit counters" in out["note"]
+
+
+# ── a status read must never be issued at an ACTION endpoint ─────────────────
+
+
+class _RecordingConn(_Conn):
+    """Records every path a read touches, so a test can assert one was NOT hit."""
+
+    def __init__(self, responses, platform=OPNSENSE):
+        super().__init__(responses, platform=platform)
+        self.paths_requested: list[str] = []
+
+    def get(self, path, **kw):
+        self.paths_requested.append(path)
+        return super().get(path, **kw)
+
+
+@pytest.mark.unit
+def test_pending_changes_never_gets_the_opnsense_apply_endpoint():
+    """OPNsense's ``apply`` is an ACTION, not a status read.
+
+    ``pending_changes`` is a read, and ``apply_changes``' dry-run calls it — so a
+    GET fired at an action endpoint from here risks committing the config from
+    inside a preview. The status read has its own registry key, mapped only on
+    platforms that serve one, so on OPNsense no request is made at all.
+    """
+    from firewall_aiops.ops import pending
+
+    conn = _RecordingConn({_p(OPNSENSE, "rules_search"): {"rows": []}})
+    out = pending.pending_changes(conn)
+    assert out["applyStatus"] is None
+    assert _p(OPNSENSE, "apply") not in conn.paths_requested
+    assert all("apply" not in p for p in conn.paths_requested)
+
+
+@pytest.mark.unit
+def test_pending_changes_reads_the_pfsense_apply_status():
+    from firewall_aiops.ops import pending
+
+    conn = _RecordingConn({
+        _p(PFSENSE, "rules_search"): {"data": []},
+        _p(PFSENSE, "apply_status"): {"data": {"applied": True, "pending_subsystems": []}},
+    }, platform=PFSENSE)
+    out = pending.pending_changes(conn)
+    assert out["applyStatus"] == {"applied": True, "pendingSubsystems": []}
+
+
+@pytest.mark.unit
+def test_rule_on_several_interfaces_still_matches_the_filter():
+    """pfSense floating rules carry a list of interfaces.
+
+    Joining them and comparing the whole string means "wan,lan" never matches a
+    request for "wan" — the same silent-drop the list fix was meant to remove,
+    just narrowed to multi-interface rules.
+    """
+    rule = dict(_PF_RULE, id=3, interface=["wan", "lan"])
+    conn = _Conn({_p(PFSENSE, "rules_search"): {"data": [rule]}}, platform=PFSENSE)
+    assert rules.list_rules(conn)["rules"][0]["interface"] == "wan,lan"
+    assert rules.list_rules(conn, interface="wan")["total"] == 1
+    assert rules.list_rules(conn, interface="lan")["total"] == 1
+    assert rules.list_rules(conn, interface="opt1")["total"] == 0

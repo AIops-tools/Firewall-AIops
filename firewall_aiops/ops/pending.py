@@ -44,14 +44,19 @@ _BASIS = (
 def _apply_status(conn: Any) -> dict | None:
     """The appliance's own "is an apply outstanding?" verdict, if it has one.
 
-    pfSense serves it on the apply endpoint's GET. A failure to read it is
-    reported as such rather than as "nothing pending" — the whole point of this
-    module is that an unreadable probe must never look clean.
+    Resolved through the ``apply_status`` key, which is mapped only on platforms
+    that actually serve a status read. That separation is the point: OPNsense's
+    ``apply`` is an *action* endpoint, and issuing a GET at it from this read
+    path — which ``apply_changes``' own dry-run calls — risks committing the
+    config from inside a preview. An unmapped platform makes no request at all.
+
+    A failure to read it is reported as such rather than as "nothing pending" —
+    the whole point of this module is that an unreadable probe must never look
+    clean.
     """
-    try:
-        path = conn.platform.path("apply")
-    except ValueError:
+    if "apply_status" not in conn.platform.paths:
         return None
+    path = conn.platform.path("apply_status")
     try:
         payload = as_obj(conn.get(path))
     except Exception as exc:  # noqa: BLE001 — a partial answer, not a clean one

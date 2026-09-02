@@ -18,7 +18,10 @@
   by interface matched nothing.** pfSense reports `interface` as a list;
   stringifying it leaked a Python repr into the payload and made
   `list_rules(interface="lan")` return an empty list — which reads as "no rules
-  on that interface" rather than "the filter is broken".
+  on that interface" rather than "the filter is broken". A rule can also sit on
+  several interfaces at once (floating rules), so the filter matches membership
+  rather than the joined string: comparing `"wan,lan"` to `"wan"` would have kept
+  silently dropping exactly those rules.
 - **`sequence` was always null on pfSense**, so rule order had to be inferred
   from list position. pfSense has no `sequence` field because a rule's `id` *is*
   its position in the evaluation order; that is now stated in the payload.
@@ -29,7 +32,12 @@
   ("Read pending firewall change status", returning `applied` /
   `pending_subsystems`). It is subsystem-level rather than per-rule, so it
   supplements the staged rule listing rather than replacing it; a failure to
-  read it is reported as an error, never as "nothing pending".
+  read it is reported as an error, never as "nothing pending". It resolves
+  through its own `apply_status` registry key, mapped only where a status read
+  exists — OPNsense maps `apply` to an **action** endpoint, and `pending_changes`
+  is a read that `apply_changes`' own dry-run calls, so issuing a GET there
+  risked committing the config from inside a preview. On a platform without the
+  key, no request is made at all.
 
 ## v0.10.0 — 2026-08-29
 
