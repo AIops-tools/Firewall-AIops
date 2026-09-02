@@ -89,3 +89,41 @@ def test_blocked_traffic_rca_detects_scan_and_service_probe():
 def test_blocked_traffic_rca_empty():
     out = ops.blocked_traffic_rca([])
     assert out["blocksEvaluated"] == 0 and out["topSources"] == []
+
+
+# ── a rule with no counter is not an unused rule ─────────────────────────────
+
+
+@pytest.mark.unit
+def test_rules_without_a_hit_counter_are_not_reported_as_unused():
+    """An unmeasured rule must not be sold to the operator as a dead one.
+
+    pfSense exposes no per-rule evaluation counter anywhere in its REST API, so
+    every enabled rule arrived with ``evaluations`` absent. Defaulting that to 0
+    made this analysis report EVERY rule on the firewall as "never hit — either
+    dead or misordered", i.e. a 100% false-positive recommendation to delete a
+    working rule set. Live-caught on pfSense CE 2.7.2, where 2 of 2 rules were
+    flagged.
+    """
+    rules = [
+        {"uuid": "0", "enabled": True, "action": "pass", "interface": "lan",
+         "source": "lan", "destination": "any", "evaluations": None},
+        {"uuid": "1", "enabled": True, "action": "pass", "interface": "wan",
+         "source": "any", "destination": "10.0.0.1", "evaluations": None},
+    ]
+    out = ops.rule_hit_and_shadow_analysis(rules)
+    assert out["unusedCount"] == 0
+    assert out["unusedRules"] == []
+    assert out["hitCountersUnavailable"] == 2
+
+
+@pytest.mark.unit
+def test_a_measured_zero_is_still_reported_as_unused():
+    """The counter-absent skip must not blunt the check where it CAN run."""
+    rules = [
+        {"uuid": "a", "enabled": True, "action": "pass", "interface": "wan",
+         "source": "any", "destination": "10.0.0.9", "evaluations": 0},
+    ]
+    out = ops.rule_hit_and_shadow_analysis(rules)
+    assert out["unusedCount"] == 1
+    assert out["hitCountersUnavailable"] == 0

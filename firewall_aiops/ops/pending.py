@@ -17,6 +17,12 @@ What this does NOT claim: neither platform exposes a per-rule "dirty" flag over
 its REST API, so this is the staged *state*, not a diff against the running
 config. ``basis`` says so in the payload rather than letting a caller assume a
 diff. Anything uncertain is reported as a named warning and never blocks.
+
+pfSense does answer the coarser question directly — ``GET /api/v2/firewall/apply``
+is documented as "Read pending firewall change status" and returns
+``{applied, pending_subsystems}`` — so ``applyStatus`` carries the appliance's own
+verdict on whether an apply is outstanding. It is subsystem-level, not per-rule,
+which is why it supplements the staged listing rather than replacing it.
 """
 
 from __future__ import annotations
@@ -25,13 +31,42 @@ from typing import Any
 
 from firewall_aiops.ops import lockout
 from firewall_aiops.ops import rules as rule_ops
-from firewall_aiops.ops._util import s
+from firewall_aiops.ops._util import as_obj, pick, s, to_bool
 
 _BASIS = (
     "Staged rule state as the platform reports it, not a diff against the "
     "running config — neither OPNsense nor pfSense exposes a per-rule dirty "
-    "flag over REST. Rules already live appear here too."
+    "flag over REST. Rules already live appear here too. Where the platform "
+    "reports an overall apply status, it is in 'applyStatus'."
 )
+
+
+def _apply_status(conn: Any) -> dict | None:
+    """The appliance's own "is an apply outstanding?" verdict, if it has one.
+
+    pfSense serves it on the apply endpoint's GET. A failure to read it is
+    reported as such rather than as "nothing pending" — the whole point of this
+    module is that an unreadable probe must never look clean.
+    """
+    try:
+        path = conn.platform.path("apply")
+    except ValueError:
+        return None
+    try:
+        payload = as_obj(conn.get(path))
+    except Exception as exc:  # noqa: BLE001 — a partial answer, not a clean one
+        return {"error": s(exc, 200)}
+    data = as_obj(pick(payload, "data")) or payload
+    applied = pick(data, "applied")
+    subsystems = pick(data, "pending_subsystems")
+    if applied is None and subsystems is None:
+        return None
+    return {
+        "applied": to_bool(applied) if applied is not None else None,
+        "pendingSubsystems": (
+            [s(x, 64) for x in subsystems] if isinstance(subsystems, list) else None
+        ),
+    }
 
 
 def pending_changes(conn: Any) -> dict:
@@ -62,5 +97,6 @@ def pending_changes(conn: Any) -> dict:
         "platform": s(target.platform, 32),
         "basis": _BASIS,
         "stagedRuleCount": len(staged),
+        "applyStatus": _apply_status(conn),
         **assessment,
     }

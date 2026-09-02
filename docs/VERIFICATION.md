@@ -97,7 +97,47 @@ exactly like a feature the operator had chosen not to turn on. That is bug class
 - **Counters**: `bytes` / `packets` are ints carrying real values (`packets` used
   to be `0.0` on every row because pfSense calls the field `packets_total`).
 
+### Second pfSense round (2026-09-02) — the write paths, and 4 more read defects
+
+`toggle_rule`, `apply_changes`, `reconfigure` and the NAT/gateway reads were all
+exercised against the same live appliance. **The writes are sound**: `toggle_rule`
+ran the full governed loop (disable → the firewall reports `enabled: false` →
+audit `ok`/`confirm` → `undo_apply` → the firewall reports `enabled: true`,
+`effectVerified: true`), and `apply_changes` / `reconfigure` both commit. NAT
+port-forward / outbound / 1:1 and `gateway_status` all return clean data — and
+note that **NAT and gateway have no write paths in this tool at all**; an earlier
+note listing them as unverified *writes* was describing a surface that does not
+exist.
+
+**Four defects in the rule read path, all live-caught:**
+
+| defect | live symptom |
+|---|---|
+| absent hit counter defaulted to `0` | 2 of 2 rules reported as "never hit — dead or misordered" |
+| `interface` list stringified | rendered `"['lan']"`; `list_rules(interface="lan")` returned **0 rules** |
+| `sequence` never populated | rule order only inferable from list position |
+| `rule_stats` sorted an all-null column | an arbitrary order presented as "busiest first" |
+
+The first is the serious one: it is the flagship analysis producing a 100%
+false-positive list of rules to delete, on one of its two platforms, for as long
+as the pfSense half has existed.
+
+> ⚠️ **A near-miss worth recording.** `toggle_rule` first failed with
+> `400 FIELD_INVALID_CHOICE: Field 'interface' must be one of [wan, enc0, openvpn]`,
+> which looked like a twelfth broken endpoint. It was not: the headless install
+> only ever assigned WAN, so the two stock rules referenced a `lan` interface
+> that does not exist on this appliance. **The test subject was wrong, not the
+> code.** Creating a rule on a real interface and toggling that showed a clean
+> loop. A lab artefact reported as a product defect would have been worse than
+> not testing at all.
+
 ### Still not verified on pfSense
+
+The `applyStatus` field reports `applied: true / pendingSubsystems: []` on this
+appliance, but a state where it flips to *pending* was never observed — a rule
+edit staged with `apply:false` still reported `applied: true`, so whether that
+flag ever goes dirty for rule changes is **unproven**; the field surfaces the
+appliance's own answer verbatim rather than interpreting it.
 
 `wireguard_status` and `dhcp_static_mappings` need a newer pfSense-pkg-RESTAPI
 than 2.4_3 (2.4_3 is the last build supporting CE 2.7.2, and CE 2.8.x is not on the

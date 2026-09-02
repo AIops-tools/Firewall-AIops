@@ -13,20 +13,55 @@ from typing import Any
 from firewall_aiops.ops._util import as_int, as_obj, opt, pick, rule_enabled, s
 
 
+def _iface(value: Any) -> str | None:
+    """Normalise a rule's interface, which is a LIST on pfSense.
+
+    OPNsense reports a string. pfSense reports ``["lan"]``, and stringifying it
+    produced the literal ``"['lan']"`` — user-visible garbage, and it also made
+    ``list_rules(interface="lan")`` match nothing at all, so filtering by
+    interface returned an empty list that read as "no rules on that interface".
+    """
+    if isinstance(value, list):
+        return opt(",".join(str(v) for v in value if v)) or None
+    return opt(value)
+
+
+def _evaluations(r: dict) -> int | None:
+    """Per-rule hit counter, or ``None`` when the platform reports none.
+
+    pfSense's REST API exposes no per-rule evaluation counter anywhere (checked
+    against the appliance's own OpenAPI schema — 212 paths, none of them rule
+    statistics). Defaulting the absent counter to ``0`` made every enabled rule
+    look never-hit, and ``rule_hit_and_shadow_analysis`` then recommended
+    deleting every working rule on the firewall. Absent is not zero.
+    """
+    value = pick(r, "evaluations", "evals")
+    return None if value is None else as_int(value)
+
+
+def _counter(r: dict, *keys: str) -> int | None:
+    """A numeric counter, or ``None`` when the platform reported none of ``keys``."""
+    value = pick(r, *keys)
+    return None if value is None else as_int(value)
+
+
 def _norm_rule(r: dict) -> dict:
     """Normalise one rule row across OPNsense / pfSense field names."""
     return {
         "uuid": opt(pick(r, "uuid", "id", "tracker", "@attributes")),
-        "sequence": opt(pick(r, "sequence", "seq", "order")),
+        # pfSense has no "sequence" field: a rule's ``id`` IS its position in the
+        # evaluation order, so the order is stated in the payload rather than
+        # left for the consumer to infer from list position.
+        "sequence": opt(pick(r, "sequence", "seq", "order", "id")),
         "enabled": rule_enabled(r),
         "action": opt(pick(r, "action", "type")),
-        "interface": opt(pick(r, "interface", "if", "descr")),
+        "interface": _iface(pick(r, "interface", "if", "descr")),
         "protocol": opt(pick(r, "protocol", "proto", "ipprotocol")),
         "source": opt(pick(r, "source_net", "source", "src")),
         "destination": opt(pick(r, "destination_net", "destination", "dst")),
         "destinationPort": opt(pick(r, "destination_port", "dstport", "dport")),
         "description": opt(pick(r, "description", "descr", "label")),
-        "evaluations": as_int(pick(r, "evaluations", "evals", default=0)),
+        "evaluations": _evaluations(r),
     }
 
 
@@ -71,14 +106,27 @@ def rule_stats(conn: Any, top: int = 20) -> dict:
             {
                 "uuid": opt(pick(r, "uuid", "id", "tracker", "rule")),
                 "description": opt(pick(r, "description", "descr", "label")),
-                "evaluations": as_int(pick(r, "evaluations", "evals", "pcnt", default=0)),
-                "packets": as_int(pick(r, "packets", "pkts", default=0)),
-                "bytes": as_int(pick(r, "bytes", "bytes_total", default=0)),
+                "evaluations": _counter(r, "evaluations", "evals", "pcnt"),
+                "packets": _counter(r, "packets", "pkts"),
+                "bytes": _counter(r, "bytes", "bytes_total"),
             }
             for r in rows
         ]
-        stats.sort(key=lambda x: x["evaluations"], reverse=True)
-        return {"total": len(stats), "rules": stats[: max(1, int(top))]}
+        # "Busiest first" is only meaningful if the platform reported counters.
+        # Sorting an all-null column and calling the result a ranking presents
+        # an arbitrary order as data — say the counters are missing instead.
+        counted = [x for x in stats if x["evaluations"] is not None]
+        if counted:
+            stats.sort(key=lambda x: (x["evaluations"] is not None, x["evaluations"]), reverse=True)
+        return {
+            "total": len(stats),
+            "rules": stats[: max(1, int(top))],
+            "hitCountersAvailable": bool(counted),
+            "note": None if counted else (
+                "This firewall reports no per-rule hit counters, so the rows are "
+                "in API order, not busiest-first, and every counter is null."
+            ),
+        }
     except Exception as exc:  # noqa: BLE001 — report as partial
         return {"error": s(exc, 200)}
 

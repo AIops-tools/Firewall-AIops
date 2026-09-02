@@ -3,6 +3,37 @@
 ## Unreleased
 
 ### Fixed
+- **The flagship rule analysis recommended deleting every working rule on any
+  pfSense.** `unusedRules` flags an enabled rule whose `evaluations` is 0, and
+  the rule normaliser defaulted an *absent* counter to 0 — but pfSense's REST
+  API exposes no per-rule hit counter anywhere (checked against the appliance's
+  own OpenAPI schema: 212 paths, none of them rule statistics). Live on pfSense
+  CE 2.7.2 that meant 2 of 2 rules reported as "never hit — either dead or
+  misordered". `evaluations` is now `null` when the platform reports none, the
+  analysis skips those rules and counts them in `hitCountersUnavailable`, and
+  `rule_stats` says `hitCountersAvailable: false` instead of sorting an all-null
+  column and presenting the arbitrary order as "busiest first". A measured zero
+  is still reported, so the check is not blunted where it can actually run.
+- **A rule's interface came back as the literal string `"['lan']"`, and filtering
+  by interface matched nothing.** pfSense reports `interface` as a list;
+  stringifying it leaked a Python repr into the payload and made
+  `list_rules(interface="lan")` return an empty list — which reads as "no rules
+  on that interface" rather than "the filter is broken".
+- **`sequence` was always null on pfSense**, so rule order had to be inferred
+  from list position. pfSense has no `sequence` field because a rule's `id` *is*
+  its position in the evaluation order; that is now stated in the payload.
+
+### Added
+- `pending_changes` now carries `applyStatus` — the appliance's own answer to
+  "is an apply outstanding?", read from pfSense's `GET /api/v2/firewall/apply`
+  ("Read pending firewall change status", returning `applied` /
+  `pending_subsystems`). It is subsystem-level rather than per-rule, so it
+  supplements the staged rule listing rather than replacing it; a failure to
+  read it is reported as an error, never as "nothing pending".
+
+## v0.10.0 — 2026-08-29
+
+### Fixed
 - **Eleven of the 31 pfSense endpoints could never have worked, and five of them
   are in no published pfSense API schema at all.** The first live run against a
   real pfSense (CE 2.7.2 + pfSense-pkg-RESTAPI 2.4_3) found that the whole VPN

@@ -384,3 +384,76 @@ def test_firewall_overview_collects_errors_when_subcalls_fail():
     # every sub-read failed → each contributes an error line, counts degrade to 0
     assert len(out["errors"]) == 4
     assert out["ruleCount"] is None and out["gatewaysTotal"] == 0
+
+
+# ── pfSense rule shape: a list interface, and an ABSENT hit counter ──────────
+
+_PF_RULE = {
+    "id": 0,
+    "type": "pass",
+    "interface": ["lan"],          # pfSense sends a LIST, OPNsense a string
+    "ipprotocol": "inet",
+    "source": "lan",
+    "destination": "any",
+    "descr": "Default allow LAN to any rule",
+    "disabled": False,
+    # note: no "evaluations" key at all — pfSense exposes no per-rule counter
+}
+
+
+@pytest.mark.unit
+def test_pfsense_rule_interface_is_not_a_stringified_list():
+    """``["lan"]`` must normalise to ``lan``, not to the literal ``"['lan']"``.
+
+    Live-caught on pfSense CE 2.7.2: the repr leaked into the payload, and it
+    also made the interface filter below match nothing.
+    """
+    conn = _Conn({_p(PFSENSE, "rules_search"): {"data": [_PF_RULE]}}, platform=PFSENSE)
+    out = rules.list_rules(conn)
+    assert out["rules"][0]["interface"] == "lan"
+
+
+@pytest.mark.unit
+def test_pfsense_rule_interface_filter_actually_matches():
+    conn = _Conn({_p(PFSENSE, "rules_search"): {"data": [_PF_RULE]}}, platform=PFSENSE)
+    assert rules.list_rules(conn, interface="lan")["total"] == 1
+
+
+@pytest.mark.unit
+def test_absent_hit_counter_is_null_not_zero():
+    """pfSense reports no per-rule counter; zero would mean "measured, never hit".
+
+    The whole point: ``rule_hit_and_shadow_analysis`` recommends deleting rules
+    with 0 evaluations, so defaulting the missing counter to 0 asked the
+    operator to delete every working rule on the firewall.
+    """
+    conn = _Conn({_p(PFSENSE, "rules_search"): {"data": [_PF_RULE]}}, platform=PFSENSE)
+    assert rules.list_rules(conn)["rules"][0]["evaluations"] is None
+
+
+@pytest.mark.unit
+def test_opnsense_hit_counter_is_still_an_int():
+    """The null-when-absent rule must not blank out a platform that DOES count."""
+    conn = _Conn({
+        _p(OPNSENSE, "rules_search"): {
+            "rows": [{"uuid": "r1", "enabled": "1", "interface": "wan", "evaluations": "42"}]
+        }
+    })
+    assert rules.list_rules(conn)["rules"][0]["evaluations"] == 42
+
+
+@pytest.mark.unit
+def test_pfsense_rule_sequence_comes_from_its_id():
+    """pfSense has no ``sequence`` field — a rule's ``id`` IS its position."""
+    conn = _Conn({_p(PFSENSE, "rules_search"): {"data": [_PF_RULE]}}, platform=PFSENSE)
+    assert rules.list_rules(conn)["rules"][0]["sequence"] == "0"
+
+
+@pytest.mark.unit
+def test_rule_stats_does_not_fake_a_ranking_without_counters():
+    """"Busiest first" over an all-null column is an arbitrary order sold as data."""
+    conn = _Conn({_p(PFSENSE, "rule_stats"): {"data": [_PF_RULE]}}, platform=PFSENSE)
+    out = rules.rule_stats(conn)
+    assert out["hitCountersAvailable"] is False
+    assert out["rules"][0]["evaluations"] is None
+    assert "no per-rule hit counters" in out["note"]

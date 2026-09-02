@@ -164,6 +164,9 @@ def rule_hit_and_shadow_analysis(rules: list[dict]) -> dict:
 
       * **unusedRules** — enabled rules with evaluations == 0 (candidates to
         remove or fix; a rule that never matches is either dead or misordered).
+        A rule whose platform reports no counter at all is NOT listed here; it
+        is counted in ``hitCountersUnavailable`` so a caller can tell "measured
+        and never hit" from "never measured".
       * **shadowedRules** — a rule fully covered by an earlier enabled
         terminating rule (pass/block/reject/drop) that would always match first.
       * **redundantRules** — a rule with the exact same match+action as an
@@ -174,12 +177,20 @@ def rule_hit_and_shadow_analysis(rules: list[dict]) -> dict:
     ordered = list(rules or [])
     unused, shadowed, redundant = [], [], []
     seen_sig: dict[tuple, str] = {}
+    no_counter = 0
 
     for idx, rule in enumerate(ordered):
         if not rule.get("enabled", True):
             continue
         uuid = rule.get("uuid")
-        if num(rule.get("evaluations")) == 0:
+        evaluations = rule.get("evaluations")
+        if evaluations is None:
+            # The platform reports no hit counter for this rule (pfSense has
+            # none at all). "Never hit" is a claim about a measurement that was
+            # never taken — asserting it here recommended deleting every
+            # working rule on the firewall. Count it as un-checked instead.
+            no_counter += 1
+        elif num(evaluations) == 0:
             unused.append({
                 "uuid": s(uuid),
                 "description": s(rule.get("description")),
@@ -206,6 +217,7 @@ def rule_hit_and_shadow_analysis(rules: list[dict]) -> dict:
 
     return {
         "rulesEvaluated": len(ordered),
+        "hitCountersUnavailable": no_counter,
         "unusedCount": len(unused),
         "shadowedCount": len(shadowed),
         "redundantCount": len(redundant),
@@ -214,7 +226,9 @@ def rule_hit_and_shadow_analysis(rules: list[dict]) -> dict:
         "redundantRules": redundant[:MAX_ROWS],
         "note": (
             "Advisory read-only heuristic: 'unused' = enabled rule with 0 "
-            "evaluations; 'shadowed' = covered by an earlier terminating rule; "
+            "evaluations, and is SKIPPED for the hitCountersUnavailable rules "
+            "whose platform reports no counter at all (an unmeasured rule is "
+            "not an unused one); 'shadowed' = covered by an earlier terminating rule; "
             "'redundant' = identical match+action to an earlier rule. Review before "
             "removing — evaluation counters reset on reboot/reload."
         ),
