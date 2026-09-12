@@ -77,6 +77,13 @@ firewall-aiops init       # wizard: pick platform (opnsense/pfsense) + encrypted
 firewall-aiops doctor
 ```
 
+Or as an OpenClaw plugin, which installs this skill and its MCP server together:
+
+```bash
+openclaw plugins install clawhub:@aiops-tools/firewall-aiops
+openclaw skills info firewall-aiops          # expect: Visible to model: yes
+```
+
 ## When to Use This Skill
 
 - Get a one-shot snapshot (`overview` / `firmware_status` / `gateway_status`)
