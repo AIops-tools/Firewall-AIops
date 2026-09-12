@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.12.2 — 2026-09-12
+
+### Changed
+- **The ClawHub bundle plugin moved from `@aiops-tools/firewall-aiops` to
+  `@zw008/firewall-aiops`**, matching the publisher the skill has always been under.
+  ClawHub cannot move a package between scopes — the scope is the publisher
+  identity — so this is a republish under the new name; the old name is
+  withdrawn. Install with:
+  `openclaw plugins install clawhub:@zw008/firewall-aiops`. Nothing about the Python
+  package, the CLI, the MCP server or the Claude Code plugin changes.
+
 ## v0.12.1 — 2026-09-12
 
 ### Added

@@ -11,7 +11,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "firewall-aiops==0.12.1",
+        "firewall-aiops==0.12.2",
         "firewall-aiops-mcp"
       ]
     }
