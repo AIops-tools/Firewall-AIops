@@ -84,6 +84,8 @@ openclaw plugins install clawhub:@aiops-tools/firewall-aiops
 openclaw skills info firewall-aiops          # expect: Visible to model: yes
 ```
 
+Needs `uvx` on `PATH`: the MCP server is fetched with uv, pinned to this release.
+
 ## When to Use This Skill
 
 - Get a one-shot snapshot (`overview` / `firmware_status` / `gateway_status`)
