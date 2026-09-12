@@ -162,7 +162,7 @@ targets:
   - name: edge
     platform: pfsense
     host: 192.0.2.2
-    verify_ssl: false
+    verify_ssl: false        # false for self-signed lab certs
     scheme: http             # https (default) | http — for a GUI behind a TLS-terminating proxy
 ```
 

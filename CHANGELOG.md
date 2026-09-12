@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.12.1 — 2026-09-12
+
+### Added
+- **The OpenClaw install path is documented.** The ClawHub bundle channel went
+  live but neither the README nor this skill said how to install from it:
+  `openclaw plugins install clawhub:@aiops-tools/firewall-aiops`. States the `uvx`
+  prerequisite (without it the skill installs but reports `Visible to model:
+  no`) and that the MCP server is pinned to this exact release.
+- **Where an exported master password lives** is now stated next to the
+  instruction to export it: readable by every process the shell starts, and
+  kept in shell history.
+
 ## v0.12.0 — 2026-09-12
 
 ### Fixed
