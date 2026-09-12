@@ -17,7 +17,7 @@ installer:
 argument-hint: "[a rule/alias id, an IP, or describe your firewall task]"
 allowed-tools:
   - Bash
-metadata: {"openclaw":{"requires":{"env":["FIREWALL_AIOPS_CONFIG"],"bins":["firewall-aiops"],"config":["~/.firewall-aiops/config.yaml","~/.firewall-aiops/secrets.enc"]},"optional":{"env":["FIREWALL_AIOPS_MASTER_PASSWORD"]},"primaryEnv":"FIREWALL_AIOPS_CONFIG","homepage":"https://github.com/AIops-tools/Firewall-AIops","emoji":"🛡️","os":["macos","linux"]}}
+metadata: {"openclaw":{"requires":{"anyBins":["firewall-aiops","uvx"]},"optional":{"env":["FIREWALL_AIOPS_CONFIG","FIREWALL_AIOPS_MASTER_PASSWORD"]},"homepage":"https://github.com/AIops-tools/Firewall-AIops","emoji":"🛡️","os":["macos","linux"]}}
 compatibility: >
   Standalone, self-governed firewall operations across OPNsense (REST API /api/..., API key+secret via HTTP Basic auth) and pfSense (REST API v2 /api/v2/..., API key via X-API-Key header). Each target in the config names its own platform, and a name-keyed platform registry selects the API shape, so the same tools work on both and one config can span a mixed estate. The governance harness (audit, policy, token/runaway budget, undo, risk-tiers) is bundled in the package — no external skill-family dependency.
   All write operations are audited to a local SQLite DB under ~/.firewall-aiops/ (relocatable via FIREWALL_AIOPS_HOME).

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.12.0 — 2026-09-12
 
 ### Fixed
 - **The flagship rule analysis recommended deleting every working rule on any
@@ -25,6 +25,15 @@
 - **`sequence` was always null on pfSense**, so rule order had to be inferred
   from list position. pfSense has no `sequence` field because a rule's `id` *is*
   its position in the evaluation order; that is now stated in the payload.
+- **The skill was invisible to the model in OpenClaw.** Its metadata
+  declared `requires.config` (OpenClaw reads that as config *keys*, not file
+  paths, so it can never be satisfied), `requires.env` and `requires.bins`
+  naming our own CLI — which a plugin user never has on PATH — plus a
+  `primaryEnv` that turned a config path into an API-key prompt. Measured on
+  OpenClaw 2026.6.35: `Visible to model: no`. It now requires
+  `anyBins: [firewall-aiops, uvx]` — either one suffices — with every variable kept
+  in `optional.env` (still declared, no longer a load gate), which the same
+  command reports as `Visible to model: yes`.
 
 ### Added
 - `pending_changes` now carries `applyStatus` — the appliance's own answer to
@@ -38,6 +47,8 @@
   is a read that `apply_changes`' own dry-run calls, so issuing a GET there
   risked committing the config from inside a preview. On a platform without the
   key, no request is made at all.
+- **Installable from ClawHub as an OpenClaw bundle plugin** (`@aiops-tools/firewall-aiops`): one install delivers the skill *and* its MCP
+  server, pinned to this exact release. `clawhub.ai/plugins`.
 
 ## v0.10.0 — 2026-08-29
 

@@ -1,0 +1,24 @@
+{
+  "id": "firewall-aiops",
+  "name": "Firewall AIops",
+  "description": "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 35 tools.",
+  "skills": [
+    "./skills"
+  ],
+  "mcpServers": {
+    "firewall-aiops": {
+      "transport": "stdio",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "firewall-aiops==0.12.0",
+        "firewall-aiops-mcp"
+      ]
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}
