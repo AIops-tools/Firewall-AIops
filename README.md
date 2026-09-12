@@ -158,12 +158,13 @@ targets:
     host: 192.0.2.1
     port: 443
     username: <opnsense-api-key>   # OPNsense API key (unused for pfSense)
-    verify_ssl: false        # false for self-signed lab certs
+    verify_ssl: true         # the default; false ONLY for self-signed lab certs
   - name: edge
     platform: pfsense
     host: 192.0.2.2
-    verify_ssl: false        # false for self-signed lab certs
-    scheme: http             # https (default) | http — for a GUI behind a TLS-terminating proxy
+    verify_ssl: true
+    # scheme: http           # https is the default; http ONLY for a GUI behind a
+    #                        # proxy that terminates TLS for it
 ```
 
 The **secret** — the OPNsense API *secret* (paired with the key for HTTP Basic auth)

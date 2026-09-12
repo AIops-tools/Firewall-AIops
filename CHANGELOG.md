@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.12.3 — 2026-09-13
+
+### Fixed
+- **The setup guide contradicted the README's own advice about privilege.** The
+  README says to connect with a least-privileged account; the setup guide's only
+  example created a fully privileged one, and every TLS example turned
+  verification off while the prose said it defaults on. A reader copies the
+  example, not the prose. Examples now show the least-privileged, TLS-verifying
+  form, with the lab exception spelled out as an exception.
+
 ## v0.12.2 — 2026-09-12
 
 ### Changed

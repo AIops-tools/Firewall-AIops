@@ -40,13 +40,14 @@ targets:
     host: 192.0.2.1
     port: 443
     username: <opnsense-api-key>
-    verify_ssl: false
+    verify_ssl: true      # the default; set false ONLY for self-signed lab certs
   - name: edge
     platform: pfsense
     host: 192.0.2.2
     port: 443
-    verify_ssl: false
-    scheme: http          # https (default) | http, for a GUI behind a TLS-terminating proxy
+    verify_ssl: true
+    # scheme: http        # https is the default; set http ONLY when the GUI is
+    #                     # published over plain HTTP behind a proxy terminating TLS
 ```
 
 ## 4. Master password (for non-interactive / MCP use)
