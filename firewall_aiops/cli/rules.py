@@ -10,6 +10,7 @@ import typer
 from firewall_aiops.cli._common import (
     DryRunOption,
     TargetOption,
+    audited,
     cli_errors,
     console,
     double_confirm,
@@ -53,6 +54,7 @@ def _print_management_impact(impact: dict | None) -> None:
 
 @rules_app.command("list")
 @cli_errors
+@audited
 def rules_list(
     interface: Annotated[
         str | None, typer.Option("--interface", "-i", help="Filter by interface")
@@ -68,6 +70,7 @@ def rules_list(
 
 @rules_app.command("show")
 @cli_errors
+@audited
 def rules_show(
     uuid: Annotated[str, typer.Argument(help="Rule uuid/id (from 'rules list')")],
     target: TargetOption = None,

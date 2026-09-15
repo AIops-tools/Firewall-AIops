@@ -7,10 +7,11 @@ from typing import Annotated
 
 import typer
 
-from firewall_aiops.cli._common import TargetOption, cli_errors, console, get_connection
+from firewall_aiops.cli._common import TargetOption, audited, cli_errors, console, get_connection
 
 
 @cli_errors
+@audited
 def log_cmd(
     action: Annotated[
         str | None, typer.Option("--action", "-a", help="Filter: pass/block/reject")

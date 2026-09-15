@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- CLI commands that read the engine without calling an MCP tool now write an
+  audit row, as every MCP call does: they run through the same `@governed_tool`
+  harness, budget and runaway guard included. Before, an operator's CLI reads
+  left no trace in `audit.db`, contrary to the documented guarantee that MCP
+  and CLI are audited alike. A test fails if any engine command escapes it.
+
 ## v0.12.3 — 2026-09-13
 
 ### Fixed
