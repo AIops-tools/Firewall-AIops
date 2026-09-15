@@ -323,7 +323,7 @@ wheels = [
 
 [[package]]
 name = "firewall-aiops"
-version = "0.12.3"
+version = "0.12.4"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
