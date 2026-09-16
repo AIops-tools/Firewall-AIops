@@ -42,10 +42,19 @@ def normalize_log(rows: list[dict]) -> list[dict]:
     return out
 
 
-def pull_log(conn: Any, limit: int = 500) -> list[dict]:
-    """[READ] Raw, normalised recent firewall-log rows (shared by the RCA)."""
+def pull_log(conn: Any, limit: int = 500, action: str | None = None) -> list[dict]:
+    """[READ] Raw, normalised recent firewall-log rows (shared by the RCA).
+
+    ``action`` filters BEFORE the limit is applied. Slicing first and filtering
+    afterwards made ``firewall_log``'s truncation flag describe a pre-cut window
+    rather than the matched set, so a request for blocked entries could answer
+    ``truncated: false`` with thousands of blocks beyond the slice.
+    """
     rows = conn.platform.rows(conn.get(conn.platform.path("firewall_log")))
-    return normalize_log(rows)[: max(1, int(limit))]
+    entries = normalize_log(rows)
+    if action:
+        entries = [e for e in entries if e["action"] == action]
+    return entries[: max(1, int(limit))]
 
 
 def firewall_log(conn: Any, action: str | None = None, limit: int = 200) -> dict:
@@ -56,21 +65,23 @@ def firewall_log(conn: Any, action: str | None = None, limit: int = 200) -> dict
         {"entries": [...], "returned": 200, "limit": 200, "truncated": true, ...}
 
     so a cut-off read announces itself. ``truncated`` is measured against the
-    full matched set, not inferred from the returned length happening to equal
-    the limit — a consumer (and a smaller local model especially) faced with a
-    long result otherwise tends to report that nothing came back at all.
+    matched set the device returned — the action filter runs before the limit —
+    not inferred from the returned length happening to equal the limit — a
+    consumer (and a smaller local model especially) faced with a long result
+    otherwise tends to report that nothing came back at all.
     """
     try:
         want_limit = max(1, int(limit))
-        # One more than asked for, so truncation is measured rather than guessed.
-        entries = pull_log(conn, limit=max(want_limit, 200) + 1 if action else want_limit + 1)
+        want = None
         if action:
             want = action.strip().lower()
             if want not in _ACTIONS:
                 raise ValueError(
                     f"Unknown action '{action}'. Choose one of: {', '.join(sorted(_ACTIONS))}."
                 )
-            entries = [e for e in entries if e["action"] == want]
+        # Filter first, then take one more than asked for: truncation is measured against
+        # the matched set, not against a window that was cut before the filter ran.
+        entries = pull_log(conn, limit=want_limit + 1, action=want)
         truncated = len(entries) > want_limit
         entries = entries[:want_limit]
         return {

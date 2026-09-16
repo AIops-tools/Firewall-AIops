@@ -38,16 +38,17 @@ def pull_gateways(conn: Any) -> list[dict]:
     return out.get("gateways", []) if isinstance(out, dict) else []
 
 
-def _classify_gateway(is_down: bool, loss: float, rtt: float, loss_pct: float,
-                      latency_ms: float) -> dict:
+def _classify_gateway(is_down: bool, loss: float | None, rtt: float | None,
+                      loss_pct: float, latency_ms: float,
+                      unmeasured: list[str] | None = None) -> dict:
     if is_down:
         return {
             "cause": "Gateway is down (no monitoring reply / 100% loss)",
             "action": "Check the WAN link/modem and ISP; fail over to a secondary "
             "gateway if this is the default route.",
         }
-    hi_loss = loss >= loss_pct
-    hi_lat = rtt >= latency_ms
+    hi_loss = loss is not None and loss >= loss_pct
+    hi_lat = rtt is not None and rtt >= latency_ms
     if hi_loss and hi_lat:
         return {
             "cause": "Upstream congestion or ISP degradation (loss and latency both high)",
@@ -62,6 +63,15 @@ def _classify_gateway(is_down: bool, loss: float, rtt: float, loss_pct: float,
         return {
             "cause": "High latency on a distant/bufferbloated path (latency high, loss normal)",
             "action": "Enable per-gateway traffic shaping/QoS; verify the path/peering.",
+        }
+    if unmeasured:
+        # A gateway the firewall reported no figures for is not a gateway measured clean.
+        return {
+            "cause": f"Not measured — the firewall reported no {' or '.join(unmeasured)} "
+                     f"for this gateway, so nothing was compared against the thresholds.",
+            "action": "Check that the gateway has a monitor IP and that the monitoring "
+                      "daemon (dpinger) is running for it; a gateway with monitoring "
+                      "disabled reports no figures.",
         }
     return {"cause": "Healthy — within thresholds", "action": "No action needed."}
 
@@ -83,10 +93,12 @@ def gateway_health_rca(
     ranked = []
     for g in gateways or []:
         status = str(g.get("status") or "").lower()
-        loss = num(g.get("lossPercent"))
-        rtt = num(g.get("rttMs"))
-        is_down = loss >= 100 or any(w in status for w in _DOWN_WORDS)
-        degraded = is_down or loss >= loss_pct or rtt >= latency_ms
+        loss = g.get("lossPercent")
+        rtt = g.get("rttMs")
+        unmeasured = [n for n, v in (("loss", loss), ("RTT", rtt)) if v is None]
+        is_down = (loss is not None and loss >= 100) or any(w in status for w in _DOWN_WORDS)
+        degraded = (is_down or (loss is not None and loss >= loss_pct)
+                    or (rtt is not None and rtt >= latency_ms))
         entry = {
             "name": s(g.get("name")),
             "address": s(g.get("address")),
@@ -94,10 +106,14 @@ def gateway_health_rca(
             "lossPercent": loss,
             "rttMs": rtt,
             "down": is_down,
+            "measured": not unmeasured,
             "degraded": degraded,
-            "_score": (1000 if is_down else 0) + loss * 10 + rtt,
+            # Unmeasured sits above every healthy gateway and below every down one:
+            # "this WAN cannot be seen" is worth reading, but it is not a failure.
+            "_score": ((1000 if is_down else 500 if unmeasured else 0)
+                       + (loss or 0.0) * 10 + (rtt or 0.0)),
         }
-        entry.update(_classify_gateway(is_down, loss, rtt, loss_pct, latency_ms))
+        entry.update(_classify_gateway(is_down, loss, rtt, loss_pct, latency_ms, unmeasured))
         ranked.append(entry)
 
     ranked.sort(key=lambda e: e["_score"], reverse=True)

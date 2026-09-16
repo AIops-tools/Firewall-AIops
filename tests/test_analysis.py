@@ -127,3 +127,41 @@ def test_a_measured_zero_is_still_reported_as_unused():
     out = ops.rule_hit_and_shadow_analysis(rules)
     assert out["unusedCount"] == 1
     assert out["hitCountersUnavailable"] == 0
+
+
+@pytest.mark.unit
+def test_a_gateway_that_reported_no_figures_is_not_called_healthy():
+    """`pick(..., default=0)` plus `num()` turned "the firewall reported nothing" into a
+    measured 0% loss / 0 ms, and the flagship RCA answered "Healthy — within thresholds"
+    for a WAN it had never seen."""
+    out = ops.gateway_health_rca([
+        {"name": "unmonitored", "status": "none", "lossPercent": None, "rttMs": None},
+        {"name": "ok", "status": "none", "lossPercent": 0, "rttMs": 5},
+    ])
+    unmeasured = next(g for g in out["worst"] if g["name"] == "unmonitored")
+    assert unmeasured["measured"] is False
+    assert "Not measured" in unmeasured["cause"]
+    assert unmeasured["action"] != "No action needed."
+    # positive control: a genuinely measured zero is still healthy
+    ok = next(g for g in out["worst"] if g["name"] == "ok")
+    assert ok["measured"] is True and ok["cause"].startswith("Healthy")
+    # and it sorts above the healthy one without outranking a real failure
+    assert [g["name"] for g in out["worst"]] == ["unmonitored", "ok"]
+
+
+@pytest.mark.unit
+def test_a_half_measured_gateway_still_gets_the_verdict_its_figure_supports():
+    """Refuse only the conclusion whose evidence is missing: a reported 40% loss is a
+    finding regardless of whether the RTT came back."""
+    out = ops.gateway_health_rca(
+        [{"name": "lossy", "status": "none", "lossPercent": 40, "rttMs": None}])
+    g = out["worst"][0]
+    assert g["degraded"] is True and "loss" in g["cause"].lower()
+    assert g["measured"] is False
+
+
+@pytest.mark.unit
+def test_a_down_gateway_is_still_down_when_its_figures_are_missing():
+    out = ops.gateway_health_rca(
+        [{"name": "dead", "status": "down", "lossPercent": None, "rttMs": None}])
+    assert out["downCount"] == 1 and out["worst"][0]["down"] is True

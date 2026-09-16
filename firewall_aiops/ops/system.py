@@ -104,9 +104,12 @@ def gateway_status(conn: Any) -> dict:
                 "name": opt(pick(r, "name", "gateway", "gwname")),
                 "address": opt(pick(r, "address", "monitorip", "gateway_ip")),
                 "status": opt(pick(r, "status", "status_translated", "state")),
-                "lossPercent": num(_strip_pct(pick(r, "loss", "loss_percent", default=0))),
-                "rttMs": num(_strip_unit(pick(r, "delay", "rtt", "latency", default=0))),
-                "stddevMs": num(_strip_unit(pick(r, "stddev", "rttsd", default=0))),
+                # No default: a gateway for which the firewall reported no loss/RTT is
+                # unmeasured, not measured-perfect. gateway_health_rca refuses to call
+                # such a gateway healthy.
+                "lossPercent": _opt_num(_strip_pct(pick(r, "loss", "loss_percent"))),
+                "rttMs": _opt_num(_strip_unit(pick(r, "delay", "rtt", "latency"))),
+                "stddevMs": _opt_num(_strip_unit(pick(r, "stddev", "rttsd"))),
             }
             for r in rows
         ]
@@ -115,11 +118,16 @@ def gateway_status(conn: Any) -> dict:
         return {"error": s(exc, 200)}
 
 
+def _opt_num(value: Any) -> float | None:
+    """A float, or None when the platform did not report the figure at all."""
+    return None if value is None else num(value)
+
+
 def _strip_pct(value: Any) -> Any:
     """Strip a trailing ``%`` so ``"3.0 %"`` parses as 3.0."""
-    return str(value).replace("%", "").strip() if value is not None else 0
+    return str(value).replace("%", "").strip() if value is not None else None
 
 
 def _strip_unit(value: Any) -> Any:
     """Strip a trailing unit (``ms``) so ``"12.4 ms"`` parses as 12.4."""
-    return str(value).replace("ms", "").strip() if value is not None else 0
+    return str(value).replace("ms", "").strip() if value is not None else None

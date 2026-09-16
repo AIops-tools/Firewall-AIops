@@ -3,6 +3,18 @@
 ## Unreleased
 
 ### Fixed
+- A gateway for which the firewall reported no loss or RTT is no longer presented as a
+  measured-perfect one. `pick(..., default=0)` and `num()` each coerced an absent figure
+  to `0.0`, so `gateway_health_rca` — the flagship diagnosis — answered "Healthy — within
+  thresholds" for a WAN it had never seen. Absent figures now read `null`, such a gateway
+  carries `measured: false` and a cause saying nothing was compared, and it ranks above
+  every healthy gateway and below every down one. A half-measured gateway still gets the
+  verdict its reported figure supports.
+- `firewall_log`'s truncation flag is now measured against the matched set. `pull_log`
+  sliced to the limit before the action filter ran, so a request for blocked entries
+  searched only a pre-cut window and could answer `truncated: false` with thousands of
+  blocks beyond it — while the docstring claimed the full matched set. The filter now
+  runs before the limit.
 - `agent-guardrails.md` promised, in the table headed "what the tool enforces — do not
   waste prompt budget on these", that all three RCAs return findings "worst-first" with
   "priority in the payload". `rule_hit_and_shadow_analysis` does not order its output at

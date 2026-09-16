@@ -518,3 +518,29 @@ def test_rule_on_several_interfaces_still_matches_the_filter():
     assert rules.list_rules(conn, interface="wan")["total"] == 1
     assert rules.list_rules(conn, interface="lan")["total"] == 1
     assert rules.list_rules(conn, interface="opt1")["total"] == 0
+
+
+@pytest.mark.unit
+def test_firewall_log_truncation_is_measured_against_the_matched_set():
+    """pull_log used to slice before firewall_log filtered, so `truncated` described a
+    pre-cut window: a device holding thousands of blocks answered `truncated: false`
+    because only the first slice was searched."""
+    from unittest.mock import MagicMock
+
+    from firewall_aiops.ops import diag
+
+    # 500 passes first, then 50 blocks — the blocks all sit beyond any early slice.
+    rows = ([{"action": "pass", "src": "10.0.0.1"}] * 500
+            + [{"action": "block", "src": "10.0.0.2"}] * 50)
+    conn = MagicMock(name="conn")
+    conn.platform.rows.return_value = rows
+    conn.get.return_value = rows
+
+    out = diag.firewall_log(conn, action="block", limit=10)
+    assert [e["action"] for e in out["entries"]] == ["block"] * 10
+    assert out["returned"] == 10
+    assert out["truncated"] is True, "40 more blocks exist beyond the limit"
+
+    # positive control: a matched set that fits must not claim truncation
+    exact = diag.firewall_log(conn, action="block", limit=50)
+    assert exact["returned"] == 50 and exact["truncated"] is False
