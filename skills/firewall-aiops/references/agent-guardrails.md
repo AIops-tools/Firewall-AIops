@@ -37,12 +37,14 @@ What the tool *does* guarantee is that you can always see what happened:
 
 ## What still needs a prompt
 
-⚠️ **Do not read priority off list position.** `rule_hit_and_shadow_analysis` does not order its output at all, and the worst-first ordering of the other two is on an internal score that is not returned. No entry carries a `rank` or a
-`severity`, so nothing in the payload states which one matters most. Make the model weigh
-every entry's measured number and say which one it acted on, rather than treating the first
-one as the headline.
-
 These are model-behaviour problems the harness cannot fix from the outside.
+
+⚠️ **Do not read priority off list position.** `rule_hit_and_shadow_analysis` does not order
+its output at all, and the worst-first ordering in the other two is computed on an internal
+score that is never returned. No entry from these three carries a `rank` or a `severity`, so
+nothing in the payload says which one matters most. Make the model weigh every entry's
+measured number — `lossPct`, `latencyMs`, `hits` — and say which one it acted on.
+
 Copy this into your agent's system prompt:
 
 ```text
