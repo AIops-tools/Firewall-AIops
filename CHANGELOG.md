@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Fixed
+- The "confirm before anything destructive" row claimed every write requires a CLI double
+  confirmation. Only `toggle_rule` and `undo apply` have CLI commands; `apply_changes`,
+  `reconfigure`, `reboot`, `restart_service`, `kill_states` and both alias writes are
+  MCP-only, where there is no confirmation step — and the row sat in the table headed "do
+  not waste prompt budget on these". Corrected, and the copyable system prompt now asks
+  the model to confirm them itself.
+- The truncation row said all three log/state reads return an `entries` list; they return
+  `entries`, `states` and `topTalkers` respectively.
 - A gateway for which the firewall reported no loss or RTT is no longer presented as a
   measured-perfect one. `pick(..., default=0)` and `num()` each coerced an absent figure
   to `0.0`, so `gateway_health_rca` — the flagship diagnosis — answered "Healthy — within
