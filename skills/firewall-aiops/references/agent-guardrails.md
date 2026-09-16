@@ -31,11 +31,16 @@ What the tool *does* guarantee is that you can always see what happened:
 | "Never restart the web GUI / lock yourself out" | **Already enforced.** `restart_service` refuses the daemon serving this appliance's own API (`nginx`, `lighttpd`, `configd`, `webgui`, ...), and `apply_changes` / `reconfigure` refuse a staged rule set that would provably cut management access. Both are exact and fail open — see `capabilities.md`. Do not spend prompt budget on it. |
 | "Don't invent a value when a field is missing" | OPNsense and pfSense populate different keys for the same concept. A field neither platform returned comes back as `null`, never as `""`. Absent and empty are distinguishable in the payload. |
 | "Tell me if the output was cut off" | `firewall_log`, `states_table` and `top_talkers` return `{"entries": [...], "returned": N, "limit": L, "truncated": true/false}`. Truncation is measured, not guessed from a length coincidence. |
-| "Preserve the ordering / tell me what's most urgent" | The RCA tools (`gateway_health_rca`, `rule_hit_and_shadow_analysis`, `blocked_traffic_rca`) return findings with the measured numbers attached, worst-first. Priority is in the payload, not implied by list position. |
+| "Make it show the number it judged on" | Every entry carries the numbers it was judged on — `lossPct` and `latencyMs` for a gateway, `hits` for a blocked source — so a claim can be checked against a figure. `gateway_health_rca` and `blocked_traffic_rca` order their rows worst-first. |
 | "Confirm before anything destructive" | Write operations require a `--dry-run`-able preview plus double confirmation at the CLI. |
 | "Log what you did" | Every governed call is audited to `~/.firewall-aiops/audit.db` regardless of what the model says it did. |
 
 ## What still needs a prompt
+
+⚠️ **Do not read priority off list position.** `rule_hit_and_shadow_analysis` does not order its output at all, and the worst-first ordering of the other two is on an internal score that is not returned. No entry carries a `rank` or a
+`severity`, so nothing in the payload states which one matters most. Make the model weigh
+every entry's measured number and say which one it acted on, rather than treating the first
+one as the headline.
 
 These are model-behaviour problems the harness cannot fix from the outside.
 Copy this into your agent's system prompt:
