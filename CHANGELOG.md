@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.12.5 — 2026-09-17
 
 ### Fixed
 - The "confirm before anything destructive" row claimed every write requires a CLI double

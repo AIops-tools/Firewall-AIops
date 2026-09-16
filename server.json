@@ -7,12 +7,12 @@
     "url": "https://github.com/AIops-tools/Firewall-AIops",
     "source": "github"
   },
-  "version": "0.12.4",
+  "version": "0.12.5",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "firewall-aiops",
-      "version": "0.12.4",
+      "version": "0.12.5",
       "transport": {
         "type": "stdio"
       }
