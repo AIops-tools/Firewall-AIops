@@ -31,7 +31,7 @@ What the tool *does* guarantee is that you can always see what happened:
 | "Never restart the web GUI / lock yourself out" | **Already enforced.** `restart_service` refuses the daemon serving this appliance's own API (`nginx`, `lighttpd`, `configd`, `webgui`, ...), and `apply_changes` / `reconfigure` refuse a staged rule set that would provably cut management access. Both are exact and fail open — see `capabilities.md`. Do not spend prompt budget on it. |
 | "Don't invent a value when a field is missing" | OPNsense and pfSense populate different keys for the same concept. A field neither platform returned comes back as `null`, never as `""`. Absent and empty are distinguishable in the payload. |
 | "Tell me if the output was cut off" | `firewall_log`, `states_table` and `top_talkers` return `{"entries": [...], "returned": N, "limit": L, "truncated": true/false}`. Truncation is measured, not guessed from a length coincidence. |
-| "Make it show the number it judged on" | Every entry carries the numbers it was judged on — `lossPercent` and `rttMs` for a gateway (`lossPct`/`latencyMs` are the *thresholds* they were compared against, reported separately under `thresholds`), `hits`, `distinctPorts` and `topPort` for a blocked source — so a claim can be checked against a figure. `blocked_traffic_rca` orders `topSources` by `hits`, which is in the payload. |
+| "Make it show the number it judged on" | Gateway and blocked-source entries carry the numbers they were judged on — `lossPercent` and `rttMs` for a gateway (`lossPct`/`latencyMs` are the *thresholds* they were compared against, reported separately under `thresholds`), `hits`, `distinctPorts` and `topPort` for a blocked source — so those claims can be checked against a figure. `blocked_traffic_rca` orders `topSources` by `hits`, which is in the payload. Rule findings are qualitative: they carry `uuid`, `description`, `interface`, `shadowedBy`/`duplicateOf` and no count, because the hit counter they would be judged on is not always available — `hitCountersUnavailable` says whether it was. |
 | "Confirm before anything destructive" | Write operations require a `--dry-run`-able preview plus double confirmation at the CLI. |
 | "Log what you did" | Every governed call is audited to `~/.firewall-aiops/audit.db` regardless of what the model says it did. |
 
@@ -59,12 +59,13 @@ TOOL USE
   a plausible-sounding answer.
 
 READING RESULTS
-- Only `blocked_traffic_rca`'s order is checkable (by `hits`). Do not read priority off the
-  position of a gateway finding or a rule finding — weigh each entry's own numbers and say
-  which one you acted on.
 - Read the whole result before concluding. If a result contains a "truncated"
   field that is true, say so and re-run with a higher limit instead of treating
   the partial result as complete.
+- Of the three RCAs, only `blocked_traffic_rca`'s order is checkable (by `hits`). Do not read
+  priority off the position of a gateway finding, and do not look for a number on a rule
+  finding — there is none; read `hitCountersUnavailable` to see whether "never hit" was even
+  measurable.
 - A null field means neither platform returned that value. Report it as "not
   available" — never infer it. In particular, a rule with a null "interface" is
   not a rule on an interface named "none".

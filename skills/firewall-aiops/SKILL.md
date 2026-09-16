@@ -125,7 +125,8 @@ MCP tools (start the server with `firewall-aiops mcp`). Recipes below say which 
    rule count. Down interfaces sort first.
 3. MCP `gateway_health_rca` → gateways ranked worst-first, each row citing its measured
    loss % and RTT, mapped to a cause (last-mile loss / congestion / latency / hard down)
-   and a concrete action.
+   and a concrete action. The ranking is computed on an internal score that is not
+   returned, so weigh each row's own numbers rather than trusting the order.
 4. If the RCA points at a stuck daemon rather than the circuit, MCP
    `restart_service(service="dpinger", dry_run=true)` to preview, then re-run for real
    (medium risk, audited, undo-recorded).
