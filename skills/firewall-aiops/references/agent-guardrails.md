@@ -31,7 +31,7 @@ What the tool *does* guarantee is that you can always see what happened:
 | "Never restart the web GUI / lock yourself out" | **Already enforced.** `restart_service` refuses the daemon serving this appliance's own API (`nginx`, `lighttpd`, `configd`, `webgui`, ...), and `apply_changes` / `reconfigure` refuse a staged rule set that would provably cut management access. Both are exact and fail open — see `capabilities.md`. Do not spend prompt budget on it. |
 | "Don't invent a value when a field is missing" | OPNsense and pfSense populate different keys for the same concept. A field neither platform returned comes back as `null`, never as `""`. Absent and empty are distinguishable in the payload. |
 | "Tell me if the output was cut off" | `firewall_log`, `states_table` and `top_talkers` return `{"entries": [...], "returned": N, "limit": L, "truncated": true/false}`. Truncation is measured, not guessed from a length coincidence. |
-| "Make it show the number it judged on" | Every entry carries the numbers it was judged on — `lossPct` and `latencyMs` for a gateway, `hits` for a blocked source — so a claim can be checked against a figure. `gateway_health_rca` and `blocked_traffic_rca` order their rows worst-first. |
+| "Make it show the number it judged on" | Every entry carries the numbers it was judged on — `lossPercent` and `rttMs` for a gateway (`lossPct`/`latencyMs` are the *thresholds* they were compared against, reported separately under `thresholds`), `hits`, `distinctPorts` and `topPort` for a blocked source — so a claim can be checked against a figure. `blocked_traffic_rca` orders `topSources` by `hits`, which is in the payload. |
 | "Confirm before anything destructive" | Write operations require a `--dry-run`-able preview plus double confirmation at the CLI. |
 | "Log what you did" | Every governed call is audited to `~/.firewall-aiops/audit.db` regardless of what the model says it did. |
 
@@ -39,11 +39,11 @@ What the tool *does* guarantee is that you can always see what happened:
 
 These are model-behaviour problems the harness cannot fix from the outside.
 
-⚠️ **Do not read priority off list position.** `rule_hit_and_shadow_analysis` does not order
-its output at all, and the worst-first ordering in the other two is computed on an internal
-score that is never returned. No entry from these three carries a `rank` or a `severity`, so
-nothing in the payload says which one matters most. Make the model weigh every entry's
-measured number — `lossPct`, `latencyMs`, `hits` — and say which one it acted on.
+⚠️ **Only one of the three orderings can be checked from the output.** `blocked_traffic_rca`
+sorts `topSources` by `hits`, and `hits` is returned — that order is verifiable.
+`gateway_health_rca` sorts on an internal score that is dropped before the payload is
+returned, so its order cannot be rechecked; and `rule_hit_and_shadow_analysis` does not order
+its output at all. No entry from these three carries a `rank` or a `severity`.
 
 Copy this into your agent's system prompt:
 
@@ -59,6 +59,9 @@ TOOL USE
   a plausible-sounding answer.
 
 READING RESULTS
+- Only `blocked_traffic_rca`'s order is checkable (by `hits`). Do not read priority off the
+  position of a gateway finding or a rule finding — weigh each entry's own numbers and say
+  which one you acted on.
 - Read the whole result before concluding. If a result contains a "truncated"
   field that is true, say so and re-run with a higher limit instead of treating
   the partial result as complete.

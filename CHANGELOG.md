@@ -3,13 +3,15 @@
 ## Unreleased
 
 ### Fixed
-- `agent-guardrails.md` claimed all three RCAs return findings
-  "worst-first" with "priority in the payload". `rule_hit_and_shadow_analysis` does
-  not order its output at all, and the other two order rows on an internal score
-  that is never returned. The claim sat in the table headed "what the tool enforces
-  — do not waste prompt budget on these".
-  The docs now state what is
-  actually ordered, and warn not to read priority off list position.
+- `agent-guardrails.md` promised, in the table headed "what the tool enforces — do not
+  waste prompt budget on these", that all three RCAs return findings "worst-first" with
+  "priority in the payload". `rule_hit_and_shadow_analysis` does not order its output at
+  all, and `gateway_health_rca` sorts on an internal score dropped before the payload is
+  returned; only `blocked_traffic_rca`'s order is checkable, because it sorts `topSources`
+  by `hits` and `hits` is returned. The row also named `lossPct`/`latencyMs` as per-gateway
+  fields — those are the *thresholds*; the gateway entries carry `lossPercent` and `rttMs`.
+  All corrected, and the copyable system prompt gained a line about not reading priority
+  off list position.
 
 ## v0.12.4 — 2026-09-15
 
