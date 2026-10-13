@@ -45,7 +45,7 @@ sorts `topSources` by `hits`, and `hits` is returned — that order is verifiabl
 returned, so its order cannot be rechecked; and `rule_hit_and_shadow_analysis` does not order
 its output at all. No entry from these three carries a `rank` or a `severity`.
 
-Copy this into your agent's system prompt:
+Recommended setup for a local model (adapt it to your agent client):
 
 ```text
 You operate an OPNsense or pfSense firewall through the firewall-aiops MCP tools.
