@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.15.0 — 2026-10-15
 
 ### Fixed
 - Fields a platform does not report are now `null` instead of a reassuring
