@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Fields a platform does not report are now `null` instead of a reassuring
+  value: `firmware_status.updatesAvailable` (pfSense's version endpoint carries
+  no update field, so the overview always said "no updates" without checking),
+  `health_status.cpuPercent` / `memPercent` (showed 0 % as if measured), and a
+  DHCP lease's `online`. With `online_only`, leases of unknown state are counted
+  in `onlineUnknown` instead of disappearing.
+- DHCP lease `online` read status words by truthiness, so `"offline"` (and
+  pfSense-style `"idle/offline"`) counted as online and passed `online_only`.
+  Status words are now mapped explicitly (`online_status` is read too), and an
+  unrecognised word is `null`, not true.
+
 ## v0.14.0 — 2026-10-15
 
 ### Fixed

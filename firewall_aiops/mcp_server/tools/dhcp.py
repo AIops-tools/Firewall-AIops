@@ -14,7 +14,8 @@ def dhcp_leases(online_only: bool = False, target: Optional[str] = None) -> dict
     """[READ] Active DHCP leases (IP, MAC, hostname, state).
 
     Args:
-        online_only: If True, return only leases marked online.
+        online_only: If True, return only leases marked online; leases whose
+            state the platform did not report are counted in ``onlineUnknown``.
         target: Firewall target name from config; omit for the default.
     """
     return ops.leases(_get_connection(target), online_only)

@@ -33,9 +33,9 @@ def firmware_status(conn: Any) -> dict:
             # win the pick.
             "product": opt(pick(src, "product_name", "product_id", "product",
                                  "base", "config_version")),
-            "updatesAvailable": to_bool(
-                pick(obj, "status", "updates", "needs_update", default=False)
-            ),
+            # None = this platform's version endpoint carries no update field
+            # (pfSense's does not); "no updates" would be a claim never measured.
+            "updatesAvailable": _opt_bool(pick(obj, "status", "updates", "needs_update")),
             "lastCheck": opt(pick(obj, "last_check", "updated", "download_size")),
         }
     except Exception as exc:  # noqa: BLE001 — report as partial
@@ -51,8 +51,8 @@ def health_status(conn: Any) -> dict:
             "platform": conn.target.platform,
             "hostname": opt(pick(obj, "hostname", "name")),
             "uptime": opt(pick(obj, "uptime", "uptime_seconds")),
-            "cpuPercent": num(pick(obj, "cpu", "cpu_usage", "cpu_load", default=0)),
-            "memPercent": num(pick(obj, "memory", "mem_usage", "memory_used_percent", default=0)),
+            "cpuPercent": _opt_num(pick(obj, "cpu", "cpu_usage", "cpu_load")),
+            "memPercent": _opt_num(pick(obj, "memory", "mem_usage", "memory_used_percent")),
             "loadAverage": opt(pick(obj, "loadavg", "load_average", "load")),
             "versions": opt(pick(obj, "versions", "kernel", "biosdate")),
         }
@@ -116,6 +116,11 @@ def gateway_status(conn: Any) -> dict:
         return {"total": len(gws), "gateways": gws}
     except Exception as exc:  # noqa: BLE001 — report as partial
         return {"error": s(exc, 200)}
+
+
+def _opt_bool(value: Any) -> bool | None:
+    """A bool, or None when the platform did not report the flag at all."""
+    return None if value is None else to_bool(value)
 
 
 def _opt_num(value: Any) -> float | None:

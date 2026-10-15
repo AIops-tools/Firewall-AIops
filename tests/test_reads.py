@@ -232,3 +232,55 @@ def test_firewall_overview_resilient_shapes():
     assert out["version"] == "24.7"
     assert out["ruleCount"] == 1
     assert out["interfacesUp"] == 1
+
+
+# ── fields a platform does not report are null, never a measured 0/false ─────
+
+
+@pytest.mark.unit
+def test_firmware_without_update_fields_is_unknown():
+    conn = _Conn({_p(PFSENSE, "firmware"): {"version": "2.7.2-RELEASE"}}, platform=PFSENSE)
+    assert system.firmware_status(conn)["updatesAvailable"] is None
+    reported = _Conn({_p(OPNSENSE, "firmware"): {"product_version": "24.7", "status": "0"}})
+    assert system.firmware_status(reported)["updatesAvailable"] is False
+
+
+@pytest.mark.unit
+def test_health_without_cpu_or_memory_is_null_not_zero():
+    conn = _Conn({_p(OPNSENSE, "system_info"): {"hostname": "fw", "uptime": "1 day"}})
+    out = system.health_status(conn)
+    assert out["cpuPercent"] is None and out["memPercent"] is None
+    measured = _Conn({_p(OPNSENSE, "system_info"): {"cpu": 0, "memory": 31}})
+    assert system.health_status(measured)["cpuPercent"] == 0.0
+
+
+@pytest.mark.unit
+def test_dhcp_online_filter_does_not_hide_unknown_state():
+    conn = _Conn({
+        _p(OPNSENSE, "dhcp_leases"): {"rows": [
+            {"address": "10.0.0.10", "mac": "aa", "online": "1"},
+            {"address": "10.0.0.12", "mac": "cc"},  # platform did not say
+        ]}
+    })
+    full = dhcp.leases(conn)
+    assert [e["online"] for e in full["leases"]] == [True, None]
+    only = dhcp.leases(conn, online_only=True)
+    assert only["total"] == 1 and only["onlineUnknown"] == 1
+
+
+@pytest.mark.unit
+def test_lease_status_words_are_read_not_truthiness():
+    # to_bool("offline") is True (non-empty string): status words must be mapped.
+    conn = _Conn({
+        _p(OPNSENSE, "dhcp_leases"): {"rows": [
+            {"address": "10.0.0.20", "mac": "a1", "status": "online"},
+            {"address": "10.0.0.21", "mac": "a2", "status": "offline"},
+            {"address": "10.0.0.22", "mac": "a3", "online_status": "idle/offline"},
+            {"address": "10.0.0.23", "mac": "a4", "online_status": "active/online"},
+            {"address": "10.0.0.24", "mac": "a5", "status": "weird"},
+        ]}
+    })
+    rows = dhcp.leases(conn)["leases"]
+    assert [r["online"] for r in rows] == [True, False, False, True, None]
+    only = dhcp.leases(conn, online_only=True)
+    assert only["total"] == 2 and only["onlineUnknown"] == 1
