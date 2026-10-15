@@ -1,6 +1,6 @@
 {
   "name": "@zw008/firewall-aiops",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 35 tools.",
   "private": true,
   "license": "MIT",
