@@ -16,6 +16,7 @@ License: MIT
 import logging
 import os
 
+from mcp_server._annotations import apply_risk_annotations
 from mcp_server._shared import _safe_error, mcp, tool_errors
 
 # Importing the tool modules registers every @mcp.tool() onto the shared
@@ -32,6 +33,10 @@ from mcp_server.tools import (  # noqa: F401 — side effects
     vpn,
     writes,
 )
+
+# Publish each tool's governance risk level as MCP annotations. Runs after
+# every tool module has registered, so no tool is advertised unannotated.
+apply_risk_annotations(mcp)
 
 __all__ = ["mcp", "main", "_safe_error", "tool_errors"]
 

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- MCP tool annotations derived from each tool's governance `risk_level`, so
+  clients can gate approval from `tools/list` alone. `low` tools advertise
+  `readOnlyHint: true`; every other tool advertises `readOnlyHint: false` and
+  `destructiveHint: true`. The `medium` tier includes deletes and hard
+  power-offs, so a tool is never advertised as non-destructive on the strength
+  of its tier. `idempotentHint` only repeats an explicit declaration. The exact
+  level is published in `_meta` under `io.github.AIops-tools/riskLevel`. These
+  are hints for the client; audit and undo are unchanged.
+
 ## v0.12.5 — 2026-09-17
 
 ### Fixed
