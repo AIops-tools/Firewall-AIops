@@ -117,7 +117,7 @@ def test_restart_dry_run_refuses_the_api_service(monkeypatch):
     A green preview followed by a refusal reads to a weak model as a transient
     failure worth retrying — the exact loop this line designs against.
     """
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn(OPNSENSE)
     monkeypatch.setattr(gov, "_get_connection", lambda target=None: conn)
@@ -132,7 +132,7 @@ def test_restart_dry_run_refuses_the_api_service(monkeypatch):
 @pytest.mark.unit
 def test_restart_dry_run_still_previews_a_safe_service(monkeypatch):
     """Fail open: a dry-run must never refuse what the real call would allow."""
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn(OPNSENSE)
     monkeypatch.setattr(gov, "_get_connection", lambda target=None: conn)
@@ -447,7 +447,7 @@ def test_pending_changes_reports_a_read_failure_as_unknown(monkeypatch):
 @pytest.mark.unit
 def test_apply_dry_run_returns_the_pending_change_set(monkeypatch):
     """The dry-run used to say only {'wouldApply': {'platform': ...}}."""
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn()
     # An uncertain finding: reported, but must not refuse on either path.
@@ -470,7 +470,7 @@ def test_apply_dry_run_returns_the_pending_change_set(monkeypatch):
 @pytest.mark.unit
 def test_apply_dry_run_refuses_a_certain_lockout(monkeypatch):
     """dry_run reports what WOULD happen; a refusal is what would happen."""
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn()
     _staged(monkeypatch, [_rule(enabled=False)])
@@ -485,7 +485,7 @@ def test_apply_dry_run_refuses_a_certain_lockout(monkeypatch):
 
 @pytest.mark.unit
 def test_apply_dry_run_honours_override_like_the_real_path(monkeypatch):
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn()
     _staged(monkeypatch, [_rule(enabled=False)])
@@ -501,7 +501,7 @@ def test_apply_dry_run_honours_override_like_the_real_path(monkeypatch):
 @pytest.mark.unit
 def test_apply_dry_run_proceeds_for_an_unrelated_rule(monkeypatch):
     """Fail open, identically to the real path."""
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn()
     _staged(monkeypatch, [_rule(enabled=False, destination="10.9.9.9")])
@@ -514,7 +514,7 @@ def test_apply_dry_run_proceeds_for_an_unrelated_rule(monkeypatch):
 
 @pytest.mark.unit
 def test_reconfigure_filter_dry_run_refuses_a_certain_lockout(monkeypatch):
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn()
     _staged(monkeypatch, [_rule(enabled=False)])
@@ -526,7 +526,7 @@ def test_reconfigure_filter_dry_run_refuses_a_certain_lockout(monkeypatch):
 
 @pytest.mark.unit
 def test_reconfigure_nonfilter_dry_run_is_not_guarded(monkeypatch):
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn()
     _staged(monkeypatch, [_rule(enabled=False)])
@@ -542,7 +542,7 @@ def test_reconfigure_nonfilter_dry_run_is_not_guarded(monkeypatch):
 
 @pytest.mark.unit
 def test_kill_states_dry_run_warns_about_the_lost_response(monkeypatch):
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     conn = _conn()
     monkeypatch.setattr(gov, "_get_connection", lambda target=None: conn)

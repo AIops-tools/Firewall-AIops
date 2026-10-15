@@ -91,7 +91,7 @@ def rules_toggle(
     dry_run: DryRunOption = False,
 ) -> None:
     """Enable/disable a filter rule (staged — run apply to make it live)."""
-    from mcp_server.tools import writes as gov
+    from firewall_aiops.mcp_server.tools import writes as gov
 
     verb = "enable" if enable else "disable"
     if dry_run:

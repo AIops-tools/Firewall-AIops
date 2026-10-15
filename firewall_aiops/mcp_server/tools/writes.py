@@ -14,8 +14,8 @@ restart_service = medium.
 from typing import Any, Optional
 
 from firewall_aiops.governance import governed_tool
+from firewall_aiops.mcp_server._shared import _get_connection, mcp, tool_errors
 from firewall_aiops.ops import writes as ops
-from mcp_server._shared import _get_connection, mcp, tool_errors
 
 # ── undo descriptors (built from the fetched before-state) ──────────────────
 

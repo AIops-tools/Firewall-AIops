@@ -124,9 +124,9 @@ def test_real_write_tool_persists_priorstate_undo(gov_home, monkeypatch):
     """End-to-end through a REAL product write tool: toggle_rule must capture
     the rule's prior enabled state before flipping and persist the
     restore-undo on disk."""
+    from firewall_aiops.mcp_server.tools import writes as gov
     from firewall_aiops.ops import rules as rule_ops
     from firewall_aiops.platform import OPNSENSE, get_platform
-    from mcp_server.tools import writes as gov
 
     conn = MagicMock(name="conn")
     conn.target.platform = OPNSENSE

@@ -28,10 +28,10 @@ dev = [
 
 [project.scripts]
 firewall-aiops = "firewall_aiops.cli:app"
-firewall-aiops-mcp = "mcp_server.server:main"
+firewall-aiops-mcp = "firewall_aiops.mcp_server.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["firewall_aiops", "mcp_server"]
+packages = ["firewall_aiops"]
 
 [tool.ruff]
 line-length = 100
@@ -47,7 +47,7 @@ select = ["E", "F", "I", "N", "W", "UP"]
 "firewall_aiops/governance/*.py" = ["E501", "N818"]
 # MCP server files are reflected by FastMCP/Pydantic; PEP 604 unions (X | None)
 # crash on older mcp/pydantic, so they intentionally use Optional[X].
-"mcp_server/**/*.py" = ["UP007", "UP045"]
+"firewall_aiops/mcp_server/**/*.py" = ["UP007", "UP045"]
 # The MCP entry keeps an explicit Python-version guard even though the declared
 # minimum is already 3.11.
 "firewall_aiops/cli/_root.py" = ["UP036"]

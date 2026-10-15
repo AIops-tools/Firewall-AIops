@@ -3,8 +3,8 @@
 from typing import Optional
 
 from firewall_aiops.governance import governed_tool
+from firewall_aiops.mcp_server._shared import _get_connection, mcp, tool_errors
 from firewall_aiops.ops import aliases as ops
-from mcp_server._shared import _get_connection, mcp, tool_errors
 
 
 @mcp.tool()

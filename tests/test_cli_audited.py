@@ -52,11 +52,12 @@ def _chain(fn):
 
 def _calls_an_mcp_tool(fn) -> bool:
     source = inspect.getsource(fn)
-    if "mcp_server" in source:
+    if "firewall_aiops.mcp_server" in source:
         return True
     names = set()
     for node in ast.parse(open(inspect.getsourcefile(fn)).read()).body:
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("mcp_server"):
+        module = (node.module or "") if isinstance(node, ast.ImportFrom) else ""
+        if module.startswith("firewall_aiops.mcp_server"):
             names |= {a.asname or a.name for a in node.names}
     used = {n.id for n in ast.walk(ast.parse(textwrap.dedent(source))) if isinstance(n, ast.Name)}
     return bool(names & used)

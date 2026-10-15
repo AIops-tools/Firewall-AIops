@@ -1,8 +1,8 @@
 """Shared MCP server primitives: the MCPServer instance, connection helper,
 error sanitisation, and the ``@tool_errors`` decorator.
 
-Tool modules under ``mcp_server/tools/`` import ``mcp`` from here and register
-their ``@mcp.tool()`` functions onto it. ``mcp_server/server.py`` then imports
+Tool modules under ``firewall_aiops/mcp_server/tools/`` import ``mcp`` from here and register
+their ``@mcp.tool()`` functions onto it. ``firewall_aiops/mcp_server/server.py`` then imports
 those modules and runs the server.
 
 Keep ``Optional[X]`` (never PEP 604 ``X | None``) in any reflected tool

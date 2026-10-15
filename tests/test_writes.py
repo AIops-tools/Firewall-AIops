@@ -85,8 +85,8 @@ def test_add_alias_entry_captures_prior_entries(monkeypatch):
 def test_governed_toggle_rule_records_undo_token(monkeypatch):
     """End-to-end: the governed toggle_rule records an inverse in the undo store."""
     from firewall_aiops.governance.undo import get_undo_store
+    from firewall_aiops.mcp_server.tools import writes as t
     from firewall_aiops.ops import rules as rule_ops
-    from mcp_server.tools import writes as t
 
     conn = _conn(OPNSENSE)
     monkeypatch.setattr(rule_ops, "rule_detail", lambda c, u: {"uuid": u, "enabled": True})
@@ -105,7 +105,7 @@ def test_governed_toggle_rule_records_undo_token(monkeypatch):
 
 @pytest.mark.unit
 def test_write_risk_tiers():
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     assert t.apply_changes._risk_level == "high"
     assert t.reconfigure._risk_level == "high"
@@ -120,7 +120,7 @@ def test_write_risk_tiers():
 
 @pytest.mark.unit
 def test_dry_run_previews_do_not_mutate(monkeypatch):
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     conn = _conn(OPNSENSE)
     monkeypatch.setattr(t, "_get_connection", lambda target=None: conn)
@@ -137,7 +137,7 @@ def test_dry_run_previews_do_not_mutate(monkeypatch):
 
 @pytest.mark.unit
 def test_toggle_undo_restores_prior_state():
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     desc = t._toggle_undo({"uuid": "r1"}, {"priorState": {"enabled": True}})
     assert desc["tool"] == "toggle_rule"
@@ -146,7 +146,7 @@ def test_toggle_undo_restores_prior_state():
 
 @pytest.mark.unit
 def test_alias_undo_descriptors_invert():
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     add_undo = t._add_alias_undo({"name": "bl", "entry": "9.9.9.9"}, {"action": "x"})
     assert add_undo["tool"] == "remove_alias_entry"

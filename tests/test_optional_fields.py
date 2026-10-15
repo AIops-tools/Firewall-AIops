@@ -175,7 +175,7 @@ def test_interface_list_renders_with_null_fields():
 
 @pytest.mark.unit
 def test_undo_list_envelope_measures_truncation(monkeypatch):
-    from mcp_server.tools import undo as undo_tools
+    from firewall_aiops.mcp_server.tools import undo as undo_tools
 
     rows = [
         {

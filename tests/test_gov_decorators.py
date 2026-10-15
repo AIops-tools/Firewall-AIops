@@ -3,7 +3,7 @@
 Portable across the whole tool line: references ONLY
 ``firewall_aiops.governance.*`` and binds state to an isolated home via
 ``FIREWALL_AIOPS_HOME``. Every governed function under test is SYNTHETIC and
-defined inline — no real ops / cli / connection / mcp_server tool is imported.
+defined inline — no real ops / cli / connection / firewall_aiops.mcp_server tool is imported.
 
 Exercises the async wrapper (audit parity with sync), the error-capture path
 with secret redaction, BudgetExceeded propagation, positional / var-arg binding,

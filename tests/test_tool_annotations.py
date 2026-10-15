@@ -19,10 +19,8 @@ def _server_package() -> str:
     """``<pkg>.mcp_server``, found on disk so this file needs no per-tool name."""
     root = Path(__file__).resolve().parents[1]
     found = sorted(p.parent.parent.name for p in root.glob("*/mcp_server/server.py"))
-    if found:
-        assert len(found) == 1, f"more than one server package: {found}"
-        return f"{found[0]}.mcp_server"
-    return "mcp_server"  # legacy top-level layout, kept only while the line migrates
+    assert len(found) == 1, f"expected exactly one <pkg>/mcp_server/server.py, found {found}"
+    return f"{found[0]}.mcp_server"
 
 
 SERVER_PACKAGE = _server_package()

@@ -42,7 +42,7 @@ def _write_conn():
 
 @pytest.mark.unit
 def test_apply_changes_dry_run_and_confirmed(monkeypatch):
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     conn = _write_conn()
     monkeypatch.setattr(t, "_get_connection", lambda target=None: conn)
@@ -57,7 +57,7 @@ def test_apply_changes_dry_run_and_confirmed(monkeypatch):
 
 @pytest.mark.unit
 def test_reconfigure_dry_run_and_confirmed(monkeypatch):
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     conn = _write_conn()
     monkeypatch.setattr(t, "_get_connection", lambda target=None: conn)
@@ -69,7 +69,7 @@ def test_reconfigure_dry_run_and_confirmed(monkeypatch):
 
 @pytest.mark.unit
 def test_kill_states_dry_run_and_confirmed(monkeypatch):
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     conn = _write_conn()
     monkeypatch.setattr(t, "_get_connection", lambda target=None: conn)
@@ -83,7 +83,7 @@ def test_kill_states_dry_run_and_confirmed(monkeypatch):
 
 @pytest.mark.unit
 def test_restart_service_dry_run_and_confirmed(monkeypatch):
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     conn = _write_conn()
     monkeypatch.setattr(t, "_get_connection", lambda target=None: conn)
@@ -96,7 +96,7 @@ def test_restart_service_dry_run_and_confirmed(monkeypatch):
 
 @pytest.mark.unit
 def test_reboot_confirmed_posts(monkeypatch):
-    from mcp_server.tools import writes as t
+    from firewall_aiops.mcp_server.tools import writes as t
 
     conn = _write_conn()
     monkeypatch.setattr(t, "_get_connection", lambda target=None: conn)
@@ -108,8 +108,8 @@ def test_reboot_confirmed_posts(monkeypatch):
 
 @pytest.mark.unit
 def test_add_and_remove_alias_entry_dispatch(monkeypatch):
+    from firewall_aiops.mcp_server.tools import writes as t
     from firewall_aiops.ops import aliases as alias_ops
-    from mcp_server.tools import writes as t
 
     conn = _write_conn()
     monkeypatch.setattr(t, "_get_connection", lambda target=None: conn)
@@ -129,7 +129,7 @@ def test_add_and_remove_alias_entry_dispatch(monkeypatch):
 
 @pytest.mark.unit
 def test_gateway_health_rca_pulls_live(monkeypatch):
-    from mcp_server.tools import analysis as t
+    from firewall_aiops.mcp_server.tools import analysis as t
 
     conn = _ReadConn({
         _p("gateways"): {"rows": [
@@ -143,7 +143,7 @@ def test_gateway_health_rca_pulls_live(monkeypatch):
 
 @pytest.mark.unit
 def test_rule_shadow_analysis_pulls_live(monkeypatch):
-    from mcp_server.tools import analysis as t
+    from firewall_aiops.mcp_server.tools import analysis as t
 
     conn = _ReadConn({
         _p("rules_search"): {"rows": [
@@ -158,7 +158,7 @@ def test_rule_shadow_analysis_pulls_live(monkeypatch):
 
 @pytest.mark.unit
 def test_blocked_traffic_rca_pulls_live(monkeypatch):
-    from mcp_server.tools import analysis as t
+    from firewall_aiops.mcp_server.tools import analysis as t
 
     conn = _ReadConn({
         _p("firewall_log"): {"rows": [
@@ -176,25 +176,25 @@ def test_blocked_traffic_rca_pulls_live(monkeypatch):
 
 @pytest.mark.unit
 def test_read_tools_return_normalized_payloads(monkeypatch):
-    from mcp_server.tools import (
+    from firewall_aiops.mcp_server.tools import (
         aliases as t_alias,
     )
-    from mcp_server.tools import (
+    from firewall_aiops.mcp_server.tools import (
         dhcp as t_dhcp,
     )
-    from mcp_server.tools import (
+    from firewall_aiops.mcp_server.tools import (
         diag as t_diag,
     )
-    from mcp_server.tools import (
+    from firewall_aiops.mcp_server.tools import (
         nat as t_nat,
     )
-    from mcp_server.tools import (
+    from firewall_aiops.mcp_server.tools import (
         rules as t_rules,
     )
-    from mcp_server.tools import (
+    from firewall_aiops.mcp_server.tools import (
         system as t_system,
     )
-    from mcp_server.tools import (
+    from firewall_aiops.mcp_server.tools import (
         vpn as t_vpn,
     )
 
@@ -252,7 +252,7 @@ def test_read_tools_return_normalized_payloads(monkeypatch):
 
 @pytest.mark.unit
 def test_tool_errors_wraps_and_sanitizes_each_shape():
-    from mcp_server._shared import tool_errors
+    from firewall_aiops.mcp_server._shared import tool_errors
 
     @tool_errors("dict")
     def boom_dict():
@@ -277,7 +277,7 @@ def test_tool_errors_wraps_and_sanitizes_each_shape():
 
 @pytest.mark.unit
 def test_get_connection_lazily_builds_manager(monkeypatch, tmp_path):
-    import mcp_server._shared as shared
+    import firewall_aiops.mcp_server._shared as shared
 
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text(

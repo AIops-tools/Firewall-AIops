@@ -117,7 +117,7 @@ def test_cli_error_translation_one_liner(monkeypatch):
 @pytest.mark.unit
 def test_cli_undo_list_renders(monkeypatch):
     from firewall_aiops.cli import app
-    from mcp_server.tools import undo as gov
+    from firewall_aiops.mcp_server.tools import undo as gov
 
     monkeypatch.setattr(gov, "undo_list", lambda limit=50, target=None: {"total": 0, "undos": []})
     r = CliRunner().invoke(app, ["undo", "list"])

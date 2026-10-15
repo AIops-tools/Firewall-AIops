@@ -73,7 +73,7 @@ pfSense REST API endpoints. No post-install scripts or background services.
 ## Static Analysis
 
 ```bash
-uvx bandit -r firewall_aiops/ mcp_server/
+uvx bandit -r firewall_aiops/
 uv run ruff check .
 ```
 
