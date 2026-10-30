@@ -25,6 +25,7 @@ Registration enforcement::
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import os
 import re
@@ -107,6 +108,7 @@ def governed_tool(
                 )
                 try:
                     _pre_check(state)
+                    _begin_write(state)
                     return _annotate_result(state, await func(*args, **kwargs))
                 except (PolicyDenied, BudgetExceeded):
                     raise
@@ -124,6 +126,7 @@ def governed_tool(
                 )
                 try:
                     _pre_check(state)
+                    _begin_write(state)
                     return _annotate_result(state, func(*args, **kwargs))
                 except (PolicyDenied, BudgetExceeded):
                     raise
@@ -163,6 +166,7 @@ class _CallState:
         "pattern_match", "audit",
         "safe_params", "env", "risk_level", "timeout_seconds",
         "rationale", "approved_by", "risk_tier", "undo", "dry_run",
+        "intent_id", "workflow_id",
     )
 
     def __init__(
@@ -191,6 +195,9 @@ class _CallState:
         self.risk_level = risk_level
         self.timeout_seconds = timeout_seconds
         self.audit = get_engine()
+        self.intent_id: int | None = None
+        candidate = os.environ.get("AIOPS_WORKFLOW_ID", "")
+        self.workflow_id = candidate if re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", candidate) else ""
 
         # Map positional args to parameter names so they appear in the audit
         # log and participate in env scoping (previously only kwargs did).
@@ -270,6 +277,23 @@ def _pre_check(state: _CallState) -> None:
         )
     except Exception:  # noqa: BLE001 — fail-open by design
         state.pattern_match = None
+
+
+def _begin_write(state: _CallState) -> None:
+    """Refuse an upstream write unless its intent is durably committed."""
+    if state.risk_level == "low" or state.dry_run:
+        return
+    state.intent_id = state.audit.begin_write(
+        skill=state.skill,
+        tool=state.tool_name,
+        params=state.safe_params,
+        agent=state.agent,
+        workflow_id=state.workflow_id,
+        risk_level=state.risk_level,
+        rationale=state.rationale,
+        approved_by=state.approved_by,
+        risk_tier=state.risk_tier,
+    )
 
 
 def _annotate_result(state: _CallState, result: Any) -> Any:
@@ -425,20 +449,60 @@ def _finalize(state: _CallState) -> None:
     pattern_id = state.pattern_match.pattern.pattern_id if state.pattern_match else ""
     pattern_armed = bool(state.pattern_match and state.pattern_match.armed)
 
-    state.audit.log(
-        skill=state.skill,
-        tool=state.tool_name,
-        params=state.safe_params,
-        result=_with_pattern_context(state.result, pattern_id, pattern_armed),
-        status=final_status,
-        duration_ms=duration,
-        agent=state.agent,
-        user="",
-        risk_level=state.risk_level,
-        rationale=state.rationale,
-        approved_by=state.approved_by,
-        risk_tier=state.risk_tier,
-    )
+    audit_id = state.intent_id
+    persisted = False
+    try:
+        if audit_id is not None:
+            state.audit.finish_write(
+                audit_id,
+                result=_with_pattern_context(state.result, pattern_id, pattern_armed),
+                status=final_status,
+                duration_ms=duration,
+            )
+            persisted = True
+        else:
+            audit_id = state.audit.log(
+                skill=state.skill,
+                tool=state.tool_name,
+                params=state.safe_params,
+                result=_with_pattern_context(state.result, pattern_id, pattern_armed),
+                status=final_status,
+                duration_ms=duration,
+                agent=state.agent,
+                workflow_id=state.workflow_id,
+                user="",
+                risk_level=state.risk_level,
+                rationale=state.rationale,
+                approved_by=state.approved_by,
+                risk_tier=state.risk_tier,
+            )
+            persisted = audit_id is not None
+    finally:
+        _emit_telemetry(state, audit_id, final_status if persisted else "unknown", duration, persisted)
+
+
+def _emit_telemetry(
+    state: _CallState, audit_id: int | None, status: str, duration_ms: int, persisted: bool
+) -> None:
+    """Optional metadata-only event for a local log collector."""
+    if os.environ.get("AIOPS_TELEMETRY") != "1":
+        return
+    truncated = state.result.get("truncated") if isinstance(state.result, dict) else None
+    if type(truncated) is not bool:
+        truncated = None
+    payload = {
+        "event": "aiops.tool",
+        "skill": state.skill,
+        "tool": state.tool_name,
+        "workflowId": state.workflow_id,
+        "auditId": audit_id,
+        "riskLevel": state.risk_level,
+        "status": status,
+        "durationMs": duration_ms,
+        "auditPersisted": persisted,
+        "truncated": truncated,
+    }
+    _log.info("AIOPS_TELEMETRY %s", json.dumps(payload, ensure_ascii=False))
 
 
 def _infer_skill(func: Any) -> str:

@@ -30,6 +30,8 @@ compatibility: >
 
 # Firewall AIops
 
+> **Audit availability:** Real writes require a durable audit intent. Reads and previews can continue if audit storage fails; check the warning and audit health before relying on their audit trail.
+
 > **Disclaimer**: Community-maintained open-source project, **not affiliated with, endorsed by, or sponsored by the OPNsense project, Deciso, Netgate, or the pfSense project.** OPNsense, pfSense and Netgate are trademarks of their respective owners. Source at [github.com/AIops-tools/Firewall-AIops](https://github.com/AIops-tools/Firewall-AIops) under the MIT license.
 
 Governed firewall operations — **35 MCP tools** across **OPNsense** (REST `/api/...`)

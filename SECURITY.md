@@ -33,7 +33,7 @@ reports.
 ### Governed Operations
 Every MCP tool runs through the bundled `@governed_tool` harness
 (`firewall_aiops.governance`):
-- **Audit** — every call logged to a local SQLite DB under `~/.firewall-aiops/`
+- **Audit** — calls logged to a local SQLite DB when storage is available under `~/.firewall-aiops/`
   (relocatable via `FIREWALL_AIOPS_HOME`), agent-attributed, secret-redacted.
 - **Token/runaway budget** — hard ceilings (`FIREWALL_MAX_TOOL_CALLS` /
   `FIREWALL_MAX_TOOL_SECONDS`) plus an on-by-default guard that trips a tight
@@ -81,3 +81,20 @@ uv run ruff check .
 
 The latest released version receives security fixes. This is a preview (0.x);
 pin a version in production.
+
+## Audit availability and telemetry
+
+Real writes first commit a `pending` audit intent. If audit storage is unavailable,
+the upstream write does not start. If finalization fails after an upstream call,
+the intent stays visible and further writes in that process are blocked. Check
+that the process is no longer executing and verify server state before calling
+`AuditEngine.reconcile_pending(audit_id)` to mark the intent `unknown`.
+
+Reads and dry-run previews continue when audit storage fails, with a warning
+rather than a durable row. New audit rows store outcome summaries instead of
+full business responses; older rows and rotated archives are not rewritten
+automatically. Parameter redaction still follows each tool's
+`sensitive_params`. `AIOPS_WORKFLOW_ID` supplies a correlation ID, and optional
+`AIOPS_TELEMETRY=1` emits metadata-only JSON logs. `AuditEngine.health()`
+reports availability, write blocking, failure count, and pending intent count.
+On POSIX the rotation lock spans processes; on Windows it is process-local.

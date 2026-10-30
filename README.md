@@ -2,6 +2,8 @@
 
 # Firewall AIops
 
+> **Audit availability:** Real writes require a committed `pending` audit row and stop before contacting the platform if storage is unavailable. Reads and previews may continue with a warning; new audit rows store outcome summaries rather than full responses.
+
 Governed, audited AI-ops for **OPNsense** and **pfSense** firewalls — for AI agents (via MCP) and humans (via CLI).
 
 > **Disclaimer**: Community-maintained open-source project. **Not affiliated with, endorsed by, or sponsored by the OPNsense project, Deciso, Netgate, or the pfSense project.** OPNsense, pfSense and Netgate are trademarks of their respective owners. MIT licensed.

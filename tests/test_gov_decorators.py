@@ -203,10 +203,8 @@ def test_error_capture_redacts_secrets(dec_home):
     import json
 
     result = json.loads(row["result"])
-    assert "hunter2" not in result["error"]
-    assert "password" in result["error"]
-    assert "***" in result["error"]
-    assert "traceback" in result
+    assert result == {"kind": "object", "error": True}
+    assert "hunter2" not in row["result"]
 
 
 @pytest.mark.unit
@@ -318,7 +316,7 @@ def test_armed_pattern_annotates_result_and_reports_outcome(dec_home):
     row = _audit_rows(dec_home)[-1]
     import json
 
-    assert json.loads(row["result"])["_pattern_id"] == "pat1"
+    assert json.loads(row["result"])["patternMatched"] is True
 
 
 @pytest.mark.unit
