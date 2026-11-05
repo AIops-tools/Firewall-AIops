@@ -1,7 +1,7 @@
 ---
 name: firewall-aiops
 slug: firewall-aiops
-displayName: "Firewall AIops"
+displayName: "OPNsense / pfSense Firewall Operations"
 summary: "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 35 tools."
 license: MIT
 homepage: https://github.com/AIops-tools/Firewall-AIops

@@ -1,6 +1,6 @@
 {
   "id": "firewall-aiops",
-  "name": "Firewall AIops",
+  "name": "OPNsense / pfSense Firewall Operations",
   "description": "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 35 tools.",
   "skills": [
     "./skills"

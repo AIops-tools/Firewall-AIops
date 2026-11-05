@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "firewall-aiops",
-  "displayName": "Firewall AIops",
+  "displayName": "OPNsense / pfSense Firewall Operations",
   "version": "0.16.0",
   "description": "Governed OPNsense + pfSense firewall ops: rules, NAT, VPN, DHCP, RCA. 35 tools.",
   "author": {
