@@ -37,6 +37,10 @@ def health_status(target: Optional[str] = None) -> dict:
 def interface_status(target: Optional[str] = None) -> dict:
     """[READ] Interfaces with link status + address, down interfaces first.
 
+    Use to identify failed or unaddressed interfaces on the selected firewall;
+    use gateway_status for upstream reachability and packet-loss checks.
+    Returns ``total`` and ``interfaces`` or an explicit ``error``.
+
     Args:
         target: Firewall target name from config; omit for the default.
     """

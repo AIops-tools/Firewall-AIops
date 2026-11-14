@@ -1,8 +1,9 @@
 # Changelog
 
-## v0.16.1 — 2026-11-06
+## v0.16.1 — 2026-11-14
 
 - Clarified the searchable display name to identify the supported products. Install IDs and API behavior are unchanged.
+- Clarify interface status versus gateway health and document explicit result/error fields.
 
 ## v0.16.0 — 2026-10-30
 
